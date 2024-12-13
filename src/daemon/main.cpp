@@ -3,10 +3,23 @@
 // SPDX-License-Identifier: MIT
 //
 
+#include "calculator.capnp.h"
+
+#include <capnp/list.h>
+#include <capnp/message.h>
+#include <capnp/rpc-twoparty.h>
+#include <kj/array.h>
+#include <kj/async-io.h>
+#include <kj/async.h>
+#include <kj/common.h>
+#include <kj/debug.h>
+#include <kj/memory.h>
+
 #include <array>
 #include <cassert>
 #include <cerrno>
 #include <csignal>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -17,6 +30,173 @@
 #include <sys/stat.h>
 #include <sys/syslog.h>
 #include <unistd.h>
+
+namespace
+{
+
+kj::Promise<double> readValue(Calculator::Value::Client value)
+{
+    return value.readRequest()
+        .send()  //
+        .then([](const capnp::Response<Calculator::Value::ReadResults>& result) { return result.getValue(); });
+}
+
+// NOLINTNEXTLINE(misc-no-recursion)
+kj::Promise<double> evaluateImpl(const Calculator::Expression::Reader& expression,
+                                 const capnp::List<double>::Reader&    params = capnp::List<double>::Reader())
+{
+    switch (expression.which())
+    {
+    case Calculator::Expression::LITERAL: {
+        return expression.getLiteral();
+    }
+
+    case Calculator::Expression::PREVIOUS_RESULT: {
+        return readValue(expression.getPreviousResult());
+    }
+
+    case Calculator::Expression::PARAMETER: {
+        KJ_REQUIRE(expression.getParameter() < params.size(), "Parameter index out-of-range.");  // NOLINT
+        return params[expression.getParameter()];
+    }
+
+    case Calculator::Expression::CALL: {
+        auto call = expression.getCall();
+        auto func = call.getFunction();
+
+        // Evaluate each parameter.
+        kj::Array<kj::Promise<double>> paramPromises = KJ_MAP(param, call.getParams())
+        {
+            return evaluateImpl(param, params);
+        };
+
+        // Join the array of promises into a promise for an array.
+        kj::Promise<kj::Array<double>> joinedParams = kj::joinPromises(kj::mv(paramPromises));
+
+        // When the parameters are complete, call the function.
+        return joinedParams.then([KJ_CPCAP(func)](const kj::Array<double>& paramValues) mutable {
+            auto request = func.callRequest();
+            request.setParams(paramValues);
+            return request.send().then(
+                [](const capnp::Response<Calculator::Function::CallResults>& result) { return result.getValue(); });
+        });
+    }
+
+    default: {
+        // Throw an exception.
+        KJ_FAIL_REQUIRE("Unknown expression type.");  // NOLINT
+    }
+    }
+}
+
+class ValueImpl final : public Calculator::Value::Server
+{
+public:
+    explicit ValueImpl(const double value)
+        : value(value)
+    {
+    }
+
+    kj::Promise<void> read(ReadContext context) override
+    {
+        context.getResults().setValue(value);
+        return kj::READY_NOW;
+    }
+
+private:
+    double value;
+};
+
+class FunctionImpl final : public Calculator::Function::Server
+{
+public:
+    FunctionImpl(const std::uint32_t paramCount, Calculator::Expression::Reader body)
+        : paramCount(paramCount)
+    {
+        this->body.setRoot(body);
+    }
+
+    kj::Promise<void> call(CallContext context) override
+    {
+        auto params = context.getParams().getParams();
+        KJ_REQUIRE(params.size() == paramCount, "Wrong number of parameters.");  // NOLINT
+
+        return evaluateImpl(body.getRoot<Calculator::Expression>(), params)
+            .then([KJ_CPCAP(context)](const double value) mutable { context.getResults().setValue(value); });
+    }
+
+private:
+    std::uint32_t paramCount;
+
+    capnp::MallocMessageBuilder body;
+};
+
+class OperatorImpl final : public Calculator::Function::Server
+{
+public:
+    explicit OperatorImpl(const Calculator::Operator op)
+        : op(op)
+    {
+    }
+
+    kj::Promise<void> call(CallContext context) override
+    {
+        auto params = context.getParams().getParams();
+        KJ_REQUIRE(params.size() == 2, "Wrong number of parameters.");  // NOLINT
+
+        double result = 0.0;
+        switch (op)
+        {
+        case Calculator::Operator::ADD:  // NOLINT
+            result = params[0] + params[1];
+            break;
+        case Calculator::Operator::SUBTRACT:
+            result = params[0] - params[1];
+            break;
+        case Calculator::Operator::MULTIPLY:
+            result = params[0] * params[1];
+            break;
+        case Calculator::Operator::DIVIDE:
+            result = params[0] / params[1];
+            break;
+        default:
+            KJ_FAIL_REQUIRE("Unknown operator.");  // NOLINT
+            break;
+        }
+
+        context.getResults().setValue(result);
+        return kj::READY_NOW;
+    }
+
+private:
+    Calculator::Operator op;
+};
+
+class CalculatorImpl final : public Calculator::Server
+{
+public:
+    kj::Promise<void> evaluate(EvaluateContext context) override
+    {
+        return evaluateImpl(context.getParams().getExpression()).then([KJ_CPCAP(context)](double value) mutable {
+            context.getResults().setValue(kj::heap<ValueImpl>(value));
+        });
+    }
+
+    kj::Promise<void> defFunction(DefFunctionContext context) override
+    {
+        auto params = context.getParams();
+        context.getResults().setFunc(kj::heap<FunctionImpl>(params.getParamCount(), params.getBody()));
+        return kj::READY_NOW;
+    }
+
+    kj::Promise<void> getOperator(GetOperatorContext context) override
+    {
+        context.getResults().setFunc(kj::heap<OperatorImpl>(context.getParams().getOp()));
+        return kj::READY_NOW;
+    }
+};
+
+}  // namespace
 
 namespace
 {
@@ -39,11 +219,17 @@ extern "C" void handle_signal(const int sig)
     }
 }
 
+bool write_string(const int fd, const char* const str)
+{
+    const auto str_len = strlen(str);
+    return str_len == ::write(fd, str, str_len);
+}
+
 void exit_with_failure(const int fd, const char* const msg)
 {
     const char* const err_txt = strerror(errno);
-    ::write(fd, msg, strlen(msg));
-    ::write(fd, err_txt, strlen(err_txt));
+    write_string(fd, msg);
+    write_string(fd, err_txt);
     ::exit(EXIT_FAILURE);
 }
 
@@ -212,7 +398,7 @@ void step_14_notify_init_complete(int& pipe_write_fd)
     // hence available in both the original and the daemon process.
 
     // Closing the writing end of the pipe will signal the original process that the daemon is ready.
-    (void) ::write(pipe_write_fd, s_init_complete, strlen(s_init_complete));
+    write_string(pipe_write_fd, s_init_complete);
     ::close(pipe_write_fd);
     pipe_write_fd = -1;
 }
@@ -277,20 +463,55 @@ void daemonize()
 
         step_15_exit_org_process(pipe_read_fd);
     }
-
-    ::openlog("ocvsmd", LOG_PID, LOG_DAEMON);
 }
 
 }  // namespace
 
 int main(const int argc, const char** const argv)
 {
-    (void) argc;
-    (void) argv;
+    bool is_dev = false;
+    for (int i = 1; i < argc; ++i)
+    {
+        if (::strcmp(argv[i], "--dev") == 0)  // NOLINT
+        {
+            is_dev = true;
+        }
+    }
 
-    daemonize();
+    if (!is_dev)
+    {
+        daemonize();
+    }
 
+    ::openlog("ocvsmd", LOG_PID, is_dev ? LOG_USER : LOG_DAEMON);
     ::syslog(LOG_NOTICE, "ocvsmd daemon started.");  // NOLINT *-vararg
+
+    // First, we need to set up the KJ async event loop. This should happen one
+    // per thread that needs to perform RPC.
+    auto io = kj::setupAsyncIo();
+
+    // Using KJ APIs, let's parse our network address and listen on it.
+    kj::Network&                    network  = io.provider->getNetwork();
+    kj::Own<kj::NetworkAddress>     addr     = network.parseAddress("127.0.0.1", 5923).wait(io.waitScope);  // NOLINT
+    kj::Own<kj::ConnectionReceiver> listener = addr->listen();
+
+    // Write the port number to stdout, in case it was chosen automatically.
+    const auto port = listener->getPort();
+    if (port == 0)
+    {
+        // The address format "unix:/path/to/socket" opens a unix domain socket,
+        // in which case the port will be zero.
+        std::cout << "Listening on Unix socket...\n" << std::endl;  // NOLINT performance-avoid-endl
+    }
+    else
+    {
+        std::cout << "Listening on port " << port << "..." << std::endl;  // NOLINT performance-avoid-endl
+    }
+
+    // Start the RPC server.
+    capnp::TwoPartyServer server(kj::heap<CalculatorImpl>());
+
+    server.listen(*listener).wait(io.waitScope);
 
     while (s_running == 1)
     {

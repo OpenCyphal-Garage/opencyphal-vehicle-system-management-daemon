@@ -46,5 +46,9 @@ if (NOT NO_STATIC_ANALYSIS)
     set(CMAKE_CXX_CLANG_TIDY ${clang_tidy})
 endif()
 
+find_package(CapnProto CONFIG REQUIRED)
+include_directories(${CAPNP_INCLUDE_DIRS})
+add_definitions(${CAPNP_DEFINITIONS})
+
 add_subdirectory(src)
 add_subdirectory(test)

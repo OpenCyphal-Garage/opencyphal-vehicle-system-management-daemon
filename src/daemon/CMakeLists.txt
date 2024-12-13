@@ -5,4 +5,12 @@
 
 cmake_minimum_required(VERSION 3.22.0)
 
-add_executable(ocvsmd main.cpp)
+capnp_generate_cpp(CAPNP_SRCS CAPNP_HDRS calculator.capnp)
+
+message(STATUS "CAPNP_SRCS: ${CAPNP_SRCS}")
+message(STATUS "CAPNP_HDRS: ${CAPNP_HDRS}")
+
+add_executable(ocvsmd main.cpp ${CAPNP_SRCS})
+target_link_libraries(ocvsmd PRIVATE ${CAPNP_LIBRARIES})
+target_include_directories(ocvsmd PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+set_source_files_properties(${CAPNP_SRCS} PROPERTIES SKIP_LINTING ON)
