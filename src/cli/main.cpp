@@ -15,16 +15,14 @@
 
 // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
 
+// No lint b/c we won't delete instances via (code generated!) base class (which has no virtual dtor).
+// NOLINTNEXTLINE(cppcoreguidelines-virtual-class-destructor)
 class PowerFunction final : public Calculator::Function::Server
 {
-    // An implementation of the Function interface wrapping pow().  Note that
-    // we're implementing this on the client side and will pass a reference to
-    // the server.  The server will then be able to make calls back to the client.
-
 public:
     kj::Promise<void> call(CallContext context) override
     {
-        auto params = context.getParams().getParams();
+        const auto params = context.getParams().getParams();
         KJ_REQUIRE(params.size() == 2, "Wrong number of parameters.");  // NOLINT
         context.getResults().setValue(pow(params[0], params[1]));
         return kj::READY_NOW;
@@ -43,7 +41,7 @@ int main(int argc, const char* argv[])
         return 1;
     }
 
-    // First we need to set up the KJ async event loop. This should happen one
+    // First, we need to set up the KJ async event loop. This should happen one
     // per thread that needs to perform RPC.
     auto io = kj::setupAsyncIo();
 
@@ -70,8 +68,8 @@ int main(int argc, const char* argv[])
         // What's interesting here is that evaluate() returns a "Value", which is
         // another interface and therefore points back to an object living on the
         // server.  We then have to call read() on that object to read it.
-        // However, even though we are making two RPC's, this block executes in
-        // *one* network round trip because of promise pipelining:  we do not wait
+        // However, even though we are making two RPCs, this block executes in
+        // *one* network round trip because of promise pipelining: we do not wait
         // for the first call to complete before we send the second call to the
         // server.
 
@@ -98,7 +96,7 @@ int main(int argc, const char* argv[])
     }
 
     {
-        // Make a request to evaluate 123 + 45 - 67.
+        // Make a request to evaluate `123+45-67`.
         //
         // The Calculator interface requires that we first call getOperator() to
         // get the addition and subtraction functions, then call evaluate() to use
@@ -126,7 +124,7 @@ int main(int argc, const char* argv[])
             subtract = request.send().getFunc();
         }
 
-        // Build the request to evaluate 123 + 45 - 67.
+        // Build the request to evaluate `123+45-67`.
         auto request = calculator.evaluateRequest();
 
         auto subtractCall = request.getExpression().initCall();
@@ -324,7 +322,7 @@ int main(int argc, const char* argv[])
     }
 
     {
-        // Make a request that will call back to a function defined locally.
+        // Make a request that will a call back to a function defined locally.
         //
         // Specifically, we will compute 2^(4 + 5).  However, exponent is not
         // defined by the Calculator server.  So, we'll implement the Function

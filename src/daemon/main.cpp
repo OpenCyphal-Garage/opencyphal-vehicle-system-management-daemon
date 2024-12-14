@@ -167,7 +167,6 @@ public:
             break;
         default:
             KJ_FAIL_REQUIRE("Unknown operator.");  // NOLINT
-            break;
         }
 
         context.getResults().setValue(result);
@@ -362,9 +361,9 @@ void step_11_change_curr_dir(const int pipe_write_fd)
     }
 }
 
-void step_12_create_pid_file(const int pipe_write_fd, const char* const pid_file_name)
+void step_12_create_pid_file(const int pipe_write_fd)
 {
-    const int fd = ::open(pid_file_name, O_RDWR | O_CREAT, 0644);  // NOLINT *-vararg
+    const int fd = ::open("/var/run/ocvsmd.pid", O_RDWR | O_CREAT, 0644);  // NOLINT *-vararg
     if (fd == -1)
     {
         exit_with_failure(pipe_write_fd, "Failed to create on PID file: ");
@@ -458,7 +457,7 @@ void daemonize()
         step_09_redirect_stdio_to_devnull(pipe_write_fd);
         step_10_reset_umask();
         step_11_change_curr_dir(pipe_write_fd);
-        step_12_create_pid_file(pipe_write_fd, "/var/run/ocvsmd.pid");
+        step_12_create_pid_file(pipe_write_fd);
         step_13_drop_privileges();
         step_14_notify_init_complete(pipe_write_fd);
     }
