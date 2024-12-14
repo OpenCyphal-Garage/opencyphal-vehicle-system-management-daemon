@@ -1,7 +1,7 @@
 name: Test Workflow
 on: [push, pull_request]
 env:
-  LLVM_VERSION: 15
+  LLVM_VERSION: 18
 jobs:
   debug:
     if: github.event_name == 'push'
