@@ -89,6 +89,8 @@ kj::Promise<double> evaluateImpl(const Calculator::Expression::Reader& expressio
     }
 }
 
+// No lint b/c we won't delete instances via (code generated!) base class (which has no virtual dtor).
+// NOLINTNEXTLINE(cppcoreguidelines-virtual-class-destructor)
 class ValueImpl final : public Calculator::Value::Server
 {
 public:
@@ -107,6 +109,8 @@ private:
     double value;
 };
 
+// No lint b/c we won't delete instances via (code generated!) base class (which has no virtual dtor).
+// NOLINTNEXTLINE(cppcoreguidelines-virtual-class-destructor)
 class FunctionImpl final : public Calculator::Function::Server
 {
 public:
@@ -131,6 +135,8 @@ private:
     capnp::MallocMessageBuilder body;
 };
 
+// No lint b/c we won't delete instances via (code generated!) base class (which has no virtual dtor).
+// NOLINTNEXTLINE(cppcoreguidelines-virtual-class-destructor)
 class OperatorImpl final : public Calculator::Function::Server
 {
 public:
@@ -172,6 +178,8 @@ private:
     Calculator::Operator op;
 };
 
+// No lint b/c we won't delete instances via (code generated!) base class (which has no virtual dtor).
+// NOLINTNEXTLINE(cppcoreguidelines-virtual-class-destructor)
 class CalculatorImpl final : public Calculator::Server
 {
 public:
