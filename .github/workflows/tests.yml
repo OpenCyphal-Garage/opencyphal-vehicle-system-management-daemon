@@ -68,7 +68,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: |
           sudo apt update -y && sudo apt upgrade -y
-          sudo apt install gcc-multilib g++-multilib
+          sudo apt install gcc-multilib g++-multilib capnproto
       - run: >
           cmake
           -B ${{ github.workspace }}/build
