@@ -105,9 +105,7 @@ To enable monitoring the progress of a firmware update process, the following so
 
 - Report the progress via `uavcan.node.Heartbeat.1.vendor_specific_status_code`. This is rejected because the VSSC is vendor-specific, so it shouldn't be relied on by the standard.
 
-The plan that is tentatively agreed upon is to define a new standard message with a fixed port-ID for needs of progress reporting. The message will likely be placed in the diagnostics namespace as `uavcan.diagnostic.ProgressReport` with a fixed port-ID of 8183. The `uavcan.node.ExecuteCommand.1` RPC may return a flag indicating if the progress of the freshly launched process will be reported via the new message.
-
-If this message-based approach is chosen, the daemon will subscribe to the message and provide the latest received progress value per node via the monitor interface.
+The plan that is tentatively agreed upon is to use an existing primitive message for progress reporting. The `uavcan.node.ExecuteCommand.1.4` RPC will optionally accept the subject-ID to publish progress messages at.
 
 ## Milestone 0
 
