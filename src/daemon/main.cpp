@@ -66,7 +66,7 @@ void step_01_close_all_file_descriptors(std::array<int, 2>& pipe_fds)
         ::exit(EXIT_FAILURE);
     }
     constexpr int first_fd_to_close = 3;  // 0, 1 & 2 for standard input, output, and error.
-    for (int fd = first_fd_to_close; fd <= rlimit_files.rlim_max; ++fd)
+    for (int fd = first_fd_to_close; fd <= rlimit_files.rlim_cur; ++fd)
     {
         (void) ::close(fd);
     }

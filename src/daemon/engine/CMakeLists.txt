@@ -44,6 +44,7 @@ add_library(ocvsmd_engine
 target_link_libraries(ocvsmd_engine
         PUBLIC udpard
         PUBLIC ${dsdl_transpiled_headers}
+        PUBLIC ocvsmd_common
 )
 target_include_directories(ocvsmd_engine
         PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}

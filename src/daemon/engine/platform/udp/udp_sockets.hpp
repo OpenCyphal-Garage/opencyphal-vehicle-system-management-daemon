@@ -108,16 +108,16 @@ private:
     CETL_NODISCARD libcyphal::IExecutor::Callback::Any registerCallback(
         libcyphal::IExecutor::Callback::Function&& function) override
     {
-        auto* const posix_executor_ext = cetl::rtti_cast<IPosixExecutorExtension*>(&executor_);
+        auto* const posix_executor_ext = cetl::rtti_cast<common::platform::IPosixExecutorExtension*>(&executor_);
         if (nullptr == posix_executor_ext)
         {
             return {};
         }
 
         CETL_DEBUG_ASSERT(udp_handle_.fd >= 0, "");
-        return posix_executor_ext->registerAwaitableCallback(std::move(function),
-                                                             IPosixExecutorExtension::Trigger::Writable{
-                                                                 udp_handle_.fd});
+        return posix_executor_ext->registerAwaitableCallback(  //
+            std::move(function),
+            common::platform::IPosixExecutorExtension::Trigger::Writable{udp_handle_.fd});
     }
 
     // MARK: Data members:
@@ -214,16 +214,16 @@ private:
     CETL_NODISCARD libcyphal::IExecutor::Callback::Any registerCallback(
         libcyphal::IExecutor::Callback::Function&& function) override
     {
-        auto* const posix_executor_ext = cetl::rtti_cast<IPosixExecutorExtension*>(&executor_);
+        auto* const posix_executor_ext = cetl::rtti_cast<common::platform::IPosixExecutorExtension*>(&executor_);
         if (nullptr == posix_executor_ext)
         {
             return {};
         }
 
         CETL_DEBUG_ASSERT(udp_handle_.fd >= 0, "");
-        return posix_executor_ext->registerAwaitableCallback(std::move(function),
-                                                             IPosixExecutorExtension::Trigger::Readable{
-                                                                 udp_handle_.fd});
+        return posix_executor_ext->registerAwaitableCallback(  //
+            std::move(function),
+            common::platform::IPosixExecutorExtension::Trigger::Readable{udp_handle_.fd});
     }
 
     // MARK: Data members:

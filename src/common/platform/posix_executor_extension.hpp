@@ -3,19 +3,18 @@
 // SPDX-License-Identifier: MIT
 //
 
-#ifndef OCVSMD_DAEMON_ENGINE_PLATFORM_POSIX_EXECUTOR_EXTENSION_HPP_INCLUDED
-#define OCVSMD_DAEMON_ENGINE_PLATFORM_POSIX_EXECUTOR_EXTENSION_HPP_INCLUDED
+#ifndef OCVSMD_COMMON_PLATFORM_POSIX_EXECUTOR_EXTENSION_HPP_INCLUDED
+#define OCVSMD_COMMON_PLATFORM_POSIX_EXECUTOR_EXTENSION_HPP_INCLUDED
 
 #include <cetl/cetl.hpp>
 #include <cetl/pf17/cetlpf.hpp>
 #include <cetl/rtti.hpp>
 #include <libcyphal/executor.hpp>
+#include <libcyphal/transport/errors.hpp>
 
 namespace ocvsmd
 {
-namespace daemon
-{
-namespace engine
+namespace common
 {
 namespace platform
 {
@@ -51,6 +50,11 @@ public:
         libcyphal::IExecutor::Callback::Function&& function,
         const Trigger::Variant&                    trigger) = 0;
 
+    using PollFailure = cetl::variant<libcyphal::transport::PlatformError, libcyphal::ArgumentError>;
+
+    CETL_NODISCARD virtual cetl::optional<PollFailure> pollAwaitableResourcesFor(
+        const cetl::optional<libcyphal::Duration> timeout) const = 0;
+
     // MARK: RTTI
 
     static constexpr cetl::type_id _get_type_id_() noexcept
@@ -65,8 +69,7 @@ protected:
 };  // IPosixExecutorExtension
 
 }  // namespace platform
-}  // namespace engine
-}  // namespace daemon
+}  // namespace common
 }  // namespace ocvsmd
 
-#endif  // OCVSMD_DAEMON_ENGINE_PLATFORM_POSIX_EXECUTOR_EXTENSION_HPP_INCLUDED
+#endif  // OCVSMD_COMMON_PLATFORM_POSIX_EXECUTOR_EXTENSION_HPP_INCLUDED

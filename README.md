@@ -25,10 +25,12 @@ Then one of the two presets depending on your system:
   ###### Debug
   ```bash
   sudo cp build/bin/Debug/ocvsmd /usr/local/bin/ocvsmd
+  sudo cp build/bin/Debug/ocvsmd-cli /usr/local/bin/ocvsmd-cli
   ```
   ###### Release
   ```bash
   sudo cp build/bin/Release/ocvsmd /usr/local/bin/ocvsmd
+  sudo cp build/bin/Release/ocvsmd-cli /usr/local/bin/ocvsmd-cli
   ```
 - Installing the Init Script:
   ```bash

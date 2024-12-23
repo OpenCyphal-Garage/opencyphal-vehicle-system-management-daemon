@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 //
 
-#ifndef OCVSMD_DAEMON_ENGINE_PLATFORM_DEBIAN_EPOLL_SINGLE_THREADED_EXECUTOR_HPP_INCLUDED
-#define OCVSMD_DAEMON_ENGINE_PLATFORM_DEBIAN_EPOLL_SINGLE_THREADED_EXECUTOR_HPP_INCLUDED
+#ifndef OCVSMD_DAEMON_ENGINE_PLATFORM_BSD_KQUEUE_SINGLE_THREADED_EXECUTOR_HPP_INCLUDED
+#define OCVSMD_DAEMON_ENGINE_PLATFORM_BSD_KQUEUE_SINGLE_THREADED_EXECUTOR_HPP_INCLUDED
 
 #include "platform/posix_executor_extension.hpp"
 #include "platform/posix_platform_error.hpp"
@@ -25,8 +25,10 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <ctime>
+#include <fcntl.h>
 #include <limits>
-#include <sys/epoll.h>
+#include <sys/event.h>
 #include <thread>
 #include <unistd.h>
 #include <utility>
@@ -39,31 +41,31 @@ namespace engine
 {
 namespace platform
 {
-namespace debian
+namespace bsd
 {
 
-/// @brief Defines Linux platform specific single-threaded executor based on `epoll` mechanism.
+/// @brief Defines BSD Linux platform specific single-threaded executor based on `kqueue` mechanism.
 ///
-class EpollSingleThreadedExecutor final : public libcyphal::platform::SingleThreadedExecutor,
-                                          public common::platform::IPosixExecutorExtension
+class KqueueSingleThreadedExecutor final : public libcyphal::platform::SingleThreadedExecutor,
+                                           public common::platform::IPosixExecutorExtension
 {
 public:
-    EpollSingleThreadedExecutor()
-        : epollfd_{::epoll_create1(0)}
+    KqueueSingleThreadedExecutor()
+        : kqueuefd_{::kqueue()}
         , total_awaitables_{0}
     {
     }
 
-    EpollSingleThreadedExecutor(const EpollSingleThreadedExecutor&)                = delete;
-    EpollSingleThreadedExecutor(EpollSingleThreadedExecutor&&) noexcept            = delete;
-    EpollSingleThreadedExecutor& operator=(const EpollSingleThreadedExecutor&)     = delete;
-    EpollSingleThreadedExecutor& operator=(EpollSingleThreadedExecutor&&) noexcept = delete;
+    KqueueSingleThreadedExecutor(const KqueueSingleThreadedExecutor&)                = delete;
+    KqueueSingleThreadedExecutor(KqueueSingleThreadedExecutor&&) noexcept            = delete;
+    KqueueSingleThreadedExecutor& operator=(const KqueueSingleThreadedExecutor&)     = delete;
+    KqueueSingleThreadedExecutor& operator=(KqueueSingleThreadedExecutor&&) noexcept = delete;
 
-    ~EpollSingleThreadedExecutor() override
+    ~KqueueSingleThreadedExecutor() override
     {
-        if (epollfd_ >= 0)
+        if (kqueuefd_ >= 0)
         {
-            ::close(epollfd_);
+            ::close(kqueuefd_);
         }
     }
 
@@ -84,38 +86,45 @@ public:
             return cetl::nullopt;
         }
 
-        // Make sure that timeout is within the range of `::epoll_wait()`'s `int` timeout parameter.
-        // Any possible negative timeout will be treated as zero (return immediately from the `::epoll_wait`).
+        // Convert libcyphal timeout (if any) to the `struct timespec` timeout in ns.
+        // Any possible negative timeout will be treated as zero (return immediately from the `::kevent`).
         //
-        int clamped_timeout_ms = -1;  // "infinite" timeout
+        struct timespec timeout_spec
+        {};
+        const struct timespec* timeout_spec_ptr = nullptr;
         if (timeout)
         {
-            using PollDuration = std::chrono::milliseconds;
+            using PollDuration  = std::chrono::nanoseconds;
+            using TimeoutNsType = decltype(timespec::tv_nsec);
 
-            clamped_timeout_ms = static_cast<int>(  //
+            // Fill nanoseconds part of the timeout spec taking into account the maximum possible value.
+            //
+            timeout_spec.tv_nsec = static_cast<TimeoutNsType>(  //
                 std::max(static_cast<PollDuration::rep>(0),
                          std::min(std::chrono::duration_cast<PollDuration>(*timeout).count(),
-                                  static_cast<PollDuration::rep>(std::numeric_limits<int>::max()))));
+                                  static_cast<PollDuration::rep>(std::numeric_limits<TimeoutNsType>::max()))));
+
+            timeout_spec_ptr = &timeout_spec;
         }
 
-        std::array<epoll_event, MaxEpollEvents> evs{};
-        const int epoll_result = ::epoll_wait(epollfd_, evs.data(), evs.size(), clamped_timeout_ms);
-        if (epoll_result < 0)
+        std::array<KEvent, MaxEvents> evs{};
+        const int kqueue_result = ::kevent(kqueuefd_, nullptr, 0, evs.data(), evs.size(), timeout_spec_ptr);
+        if (kqueue_result < 0)
         {
             const auto err = errno;
             return libcyphal::transport::PlatformError{PosixPlatformError{err}};
         }
-        if (epoll_result == 0)
+        if (kqueue_result == 0)
         {
             return cetl::nullopt;
         }
-        const auto epoll_nfds = static_cast<std::size_t>(epoll_result);
+        const auto kqueue_nfds = static_cast<std::size_t>(kqueue_result);
 
         const auto now_time = now();
-        for (std::size_t index = 0; index < epoll_nfds; ++index)
+        for (std::size_t index = 0; index < kqueue_nfds; ++index)
         {
-            const epoll_event& ev = evs[index];
-            if (auto* const cb_interface = static_cast<AwaitableNode*>(ev.data.ptr))
+            const KEvent& ev = evs[index];
+            if (auto* const cb_interface = static_cast<AwaitableNode*>(ev.udata))
             {
                 cb_interface->schedule(Callback::Schedule::Once{now_time});
             }
@@ -136,11 +145,11 @@ protected:
             cetl::make_overloaded(
                 [&new_cb_node](const Trigger::Readable& readable) {
                     //
-                    new_cb_node.setup(readable.fd, EPOLLIN);
+                    new_cb_node.setup(readable.fd, EVFILT_READ);
                 },
                 [&new_cb_node](const Trigger::Writable& writable) {
                     //
-                    new_cb_node.setup(writable.fd, EPOLLOUT);
+                    new_cb_node.setup(writable.fd, EVFILT_WRITE);
                 }),
             trigger);
 
@@ -168,8 +177,9 @@ protected:
     }
 
 private:
-    using Base = SingleThreadedExecutor;
-    using Self = EpollSingleThreadedExecutor;
+    using KEvent = struct kevent;
+    using Base   = SingleThreadedExecutor;
+    using Self   = KqueueSingleThreadedExecutor;
 
     /// No Sonar cpp:S4963 b/c `AwaitableNode` supports move operation.
     ///
@@ -187,20 +197,25 @@ private:
         {
             if (fd_ >= 0)
             {
-                ::epoll_ctl(getExecutor().epollfd_, EPOLL_CTL_DEL, fd_, nullptr);
+                KEvent ev{};
+                EV_SET(&ev, fd_, events_, EV_DELETE, NOTE_DELETE, 0, 0);
+                ::kevent(getExecutor().kqueuefd_, &ev, 1, nullptr, 0, nullptr);
                 getExecutor().total_awaitables_--;
             }
         }
 
         AwaitableNode(AwaitableNode&& other) noexcept
-            : CallbackNode(std::move(other))
+            : CallbackNode(std::move(static_cast<CallbackNode&&>(other)))
             , fd_{std::exchange(other.fd_, -1)}
             , events_{std::exchange(other.events_, 0)}
         {
             if (fd_ >= 0)
             {
-                ::epoll_event ev{events_, {this}};
-                ::epoll_ctl(getExecutor().epollfd_, EPOLL_CTL_MOD, fd_, &ev);
+                KEvent ev{};
+                EV_SET(&ev, fd_, events_, EV_DELETE, NOTE_DELETE, 0, 0);
+                ::kevent(getExecutor().kqueuefd_, &ev, 1, nullptr, 0, nullptr);
+                EV_SET(&ev, fd_, events_, EV_ADD | EV_CLEAR, NOTE_WRITE, 0, this);
+                ::kevent(getExecutor().kqueuefd_, &ev, 1, nullptr, 0, nullptr);
             }
         }
 
@@ -224,11 +239,12 @@ private:
             CETL_DEBUG_ASSERT(events != 0, "");
 
             fd_     = fd;
-            events_ = events;
+            events_ = events | EVFILT_VNODE;
 
             getExecutor().total_awaitables_++;
-            ::epoll_event ev{events_, {this}};
-            ::epoll_ctl(getExecutor().epollfd_, EPOLL_CTL_ADD, fd_, &ev);
+            KEvent ev{};
+            EV_SET(&ev, fd, events_, EV_ADD | EV_CLEAR, NOTE_WRITE, 0, this);
+            ::kevent(getExecutor().kqueuefd_, &ev, 1, nullptr, 0, nullptr);
         }
 
     private:
@@ -248,17 +264,17 @@ private:
 
     // MARK: - Data members:
 
-    static constexpr int MaxEpollEvents = 16;
+    static constexpr int MaxEvents = 16;
 
-    int         epollfd_;
+    int         kqueuefd_;
     std::size_t total_awaitables_;
 
-};  // EpollSingleThreadedExecutor
+};  // KqueueSingleThreadedExecutor
 
-}  // namespace debian
+}  // namespace bsd
 }  // namespace platform
 }  // namespace engine
 }  // namespace daemon
 }  // namespace ocvsmd
 
-#endif  // OCVSMD_DAEMON_ENGINE_PLATFORM_DEBIAN_EPOLL_SINGLE_THREADED_EXECUTOR_HPP_INCLUDED
+#endif  // OCVSMD_DAEMON_ENGINE_PLATFORM_BSD_KQUEUE_SINGLE_THREADED_EXECUTOR_HPP_INCLUDED
