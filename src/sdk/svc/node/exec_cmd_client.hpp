@@ -14,7 +14,6 @@
 #include <cetl/cetl.hpp>
 #include <cetl/pf17/cetlpf.hpp>
 
-#include <chrono>
 #include <memory>
 #include <unordered_map>
 #include <utility>
@@ -43,8 +42,7 @@ public:
 
     CETL_NODISCARD static Ptr make(cetl::pmr::memory_resource&           memory,
                                    const common::ipc::ClientRouter::Ptr& ipc_router,
-                                   Spec::Request&&                       request,
-                                   const std::chrono::microseconds       timeout);
+                                   Spec::Request&&                       request);
 
     ExecCmdClient(ExecCmdClient&&)                 = delete;
     ExecCmdClient(const ExecCmdClient&)            = delete;

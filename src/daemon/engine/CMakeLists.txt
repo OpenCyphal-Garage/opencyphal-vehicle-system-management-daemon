@@ -53,6 +53,7 @@ add_library(ocvsmd_engine
         svc/file_server/push_root_service.cpp
         svc/file_server/services.cpp
         svc/node/exec_cmd_service.cpp
+        svc/node/list_registers_service.cpp
         svc/node/services.cpp
 )
 target_link_libraries(ocvsmd_engine

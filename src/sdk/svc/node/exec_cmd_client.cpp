@@ -16,8 +16,6 @@
 #include <cetl/cetl.hpp>
 #include <cetl/pf17/cetlpf.hpp>
 
-#include <chrono>
-#include <cstdint>
 #include <functional>
 #include <memory>
 #include <unordered_map>
@@ -39,15 +37,12 @@ class ExecCmdClientImpl final : public ExecCmdClient
 public:
     ExecCmdClientImpl(cetl::pmr::memory_resource&           memory,
                       const common::ipc::ClientRouter::Ptr& ipc_router,
-                      Spec::Request&&                       request,
-                      const std::chrono::microseconds       timeout)
+                      Spec::Request&&                       request)
         : memory_{memory}
         , logger_{common::getLogger("svc")}
         , request_{std::move(request)}
         , channel_{ipc_router->makeChannel<Channel>(Spec::svc_full_name())}
     {
-        // TODO: handle timeout
-        (void) timeout;
     }
 
     void submitImpl(std::function<void(Result&&)>&& receiver) override
@@ -83,7 +78,7 @@ private:
         node_id_to_response_.emplace(input.node_id, std::move(node_response));
     }
 
-    void handleEvent(const Channel::Completed& completed) const
+    void handleEvent(const Channel::Completed& completed)
     {
         CETL_DEBUG_ASSERT(receiver_, "");
 
@@ -94,15 +89,15 @@ private:
             receiver_(static_cast<Failure>(completed.error_code));
             return;
         }
-        receiver_(Success{node_id_to_response_});
+        receiver_(std::move(node_id_to_response_));
     }
 
-    cetl::pmr::memory_resource&                     memory_;
-    common::LoggerPtr                               logger_;
-    Spec::Request                                   request_;
-    Channel                                         channel_;
-    std::function<void(Result&&)>                   receiver_;
-    std::unordered_map<std::uint16_t, NodeResponse> node_id_to_response_;
+    cetl::pmr::memory_resource&   memory_;
+    common::LoggerPtr             logger_;
+    Spec::Request                 request_;
+    Channel                       channel_;
+    std::function<void(Result&&)> receiver_;
+    Success                       node_id_to_response_;
 
 };  // ExecCmdClientImpl
 
@@ -110,10 +105,9 @@ private:
 
 CETL_NODISCARD ExecCmdClient::Ptr ExecCmdClient::make(cetl::pmr::memory_resource&           memory,
                                                       const common::ipc::ClientRouter::Ptr& ipc_router,
-                                                      Spec::Request&&                       request,
-                                                      const std::chrono::microseconds       timeout)
+                                                      Spec::Request&&                       request)
 {
-    return std::make_shared<ExecCmdClientImpl>(memory, ipc_router, std::move(request), timeout);
+    return std::make_shared<ExecCmdClientImpl>(memory, ipc_router, std::move(request));
 }
 
 }  // namespace node

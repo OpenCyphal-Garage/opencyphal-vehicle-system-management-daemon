@@ -58,7 +58,7 @@ public:
                                                         {node_request.command, node_request.parameter, &memory_},
                                                         &memory_};
 
-        auto svc_client = ExecCmdClient::make(memory_, ipc_router_, std::move(request), timeout);
+        auto svc_client = ExecCmdClient::make(memory_, ipc_router_, std::move(request));
 
         return std::make_unique<CommandSender>(std::move(svc_client));
     }

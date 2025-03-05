@@ -3,3 +3,10 @@ uint16[<=128] node_ids
 UavcanNodeExecCmdReq.0.1 payload
 
 @extent 600 * 8
+
+---
+
+uint16 node_id
+UavcanNodeExecCmdRes.0.1 payload
+
+@extent 64 * 8

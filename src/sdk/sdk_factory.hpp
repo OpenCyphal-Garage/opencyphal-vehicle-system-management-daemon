@@ -8,6 +8,7 @@
 
 #include <ocvsmd/sdk/file_server.hpp>
 #include <ocvsmd/sdk/node_command_client.hpp>
+#include <ocvsmd/sdk/node_registry_client.hpp>
 
 #include "ipc/client_router.hpp"
 
@@ -26,6 +27,9 @@ struct Factory
 
     CETL_NODISCARD static NodeCommandClient::Ptr makeNodeCommandClient(cetl::pmr::memory_resource&    memory,
                                                                        common::ipc::ClientRouter::Ptr ipc_router);
+
+    CETL_NODISCARD static NodeRegistryClient::Ptr makeNodeRegistryClient(cetl::pmr::memory_resource&    memory,
+                                                                         common::ipc::ClientRouter::Ptr ipc_router);
 
 };  // Factory
 

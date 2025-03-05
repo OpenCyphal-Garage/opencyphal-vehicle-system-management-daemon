@@ -16,7 +16,7 @@
 #include "ocvsmd/common/ipc/RouteChannelMsg_0_1.hpp"
 #include "ocvsmd/common/ipc/RouteConnect_0_1.hpp"
 #include "ocvsmd/common/ipc/Route_0_1.hpp"
-#include "ocvsmd/common/svc/node/ExecCmdSvcRequest_0_1.hpp"
+#include "ocvsmd/common/svc/node/ExecCmd_0_1.hpp"
 
 #include <cetl/pf17/cetlpf.hpp>
 
@@ -155,7 +155,7 @@ TEST_F(TestClientRouter, start)
 
 TEST_F(TestClientRouter, makeChannel)
 {
-    using Msg     = ocvsmd::common::svc::node::ExecCmdSvcRequest_0_1;
+    using Msg     = ocvsmd::common::svc::node::ExecCmd::Request_0_1;
     using Channel = Channel<Msg, Msg>;
 
     StrictMock<pipe::ClientPipeMock> client_pipe_mock;
@@ -175,7 +175,7 @@ TEST_F(TestClientRouter, makeChannel)
 
 TEST_F(TestClientRouter, makeChannel_send)
 {
-    using Msg     = ocvsmd::common::svc::node::ExecCmdSvcRequest_0_1;
+    using Msg     = ocvsmd::common::svc::node::ExecCmd::Request_0_1;
     using Channel = Channel<Msg, Msg>;
 
     StrictMock<pipe::ClientPipeMock> client_pipe_mock;
@@ -212,7 +212,7 @@ TEST_F(TestClientRouter, makeChannel_send)
 
 TEST_F(TestClientRouter, makeChannel_receive_events)
 {
-    using Msg     = ocvsmd::common::svc::node::ExecCmdSvcRequest_0_1;
+    using Msg     = ocvsmd::common::svc::node::ExecCmd::Request_0_1;
     using Channel = Channel<Msg, Msg>;
 
     StrictMock<pipe::ClientPipeMock> client_pipe_mock;

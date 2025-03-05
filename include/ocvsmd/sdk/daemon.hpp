@@ -8,6 +8,7 @@
 
 #include "file_server.hpp"
 #include "node_command_client.hpp"
+#include "node_registry_client.hpp"
 
 #include <cetl/cetl.hpp>
 #include <cetl/pf17/cetlpf.hpp>
@@ -66,6 +67,13 @@ public:
     ///         The component is always present in the OCVSMD engine, so the result is never `nullptr`.
     ///
     virtual NodeCommandClient::Ptr getNodeCommandClient() const = 0;
+
+    /// Gets a pointer to the shared entity which represents the Node Registry component of the OCVSMD engine.
+    ///
+    /// @return Shared pointer to the client side of the Node Registry component.
+    ///         The component is always present in the OCVSMD engine, so the result is never `nullptr`.
+    ///
+    virtual NodeRegistryClient::Ptr getNodeRegistryClient() const = 0;
 
 protected:
     Daemon() = default;

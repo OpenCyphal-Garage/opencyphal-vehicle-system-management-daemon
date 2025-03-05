@@ -11,6 +11,7 @@
 #include "ipc/pipe/socket_client.hpp"
 #include "logging.hpp"
 #include "ocvsmd/sdk/node_command_client.hpp"
+#include "ocvsmd/sdk/node_registry_client.hpp"
 #include "sdk_factory.hpp"
 
 #include <cetl/cetl.hpp>
@@ -59,8 +60,9 @@ public:
 
         ipc_router_ = common::ipc::ClientRouter::make(memory_, std::move(client_pipe));
 
-        file_server_         = Factory::makeFileServer(memory_, ipc_router_);
-        node_command_client_ = Factory::makeNodeCommandClient(memory_, ipc_router_);
+        file_server_          = Factory::makeFileServer(memory_, ipc_router_);
+        node_command_client_  = Factory::makeNodeCommandClient(memory_, ipc_router_);
+        node_registry_client_ = Factory::makeNodeRegistryClient(memory_, ipc_router_);
 
         if (const int err = ipc_router_->start())
         {
@@ -84,6 +86,11 @@ public:
         return node_command_client_;
     }
 
+    NodeRegistryClient::Ptr getNodeRegistryClient() const override
+    {
+        return node_registry_client_;
+    }
+
 private:
     cetl::pmr::memory_resource&    memory_;
     libcyphal::IExecutor&          executor_;
@@ -91,6 +98,7 @@ private:
     common::ipc::ClientRouter::Ptr ipc_router_;
     FileServer::Ptr                file_server_;
     NodeCommandClient::Ptr         node_command_client_;
+    NodeRegistryClient::Ptr        node_registry_client_;
 
 };  // DaemonImpl
 

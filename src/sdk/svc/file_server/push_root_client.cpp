@@ -14,7 +14,6 @@
 #include <cetl/cetl.hpp>
 #include <cetl/pf17/cetlpf.hpp>
 
-#include <chrono>
 #include <functional>
 #include <memory>
 #include <string>

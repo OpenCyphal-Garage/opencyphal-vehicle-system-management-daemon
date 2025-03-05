@@ -111,7 +111,7 @@ private:
 
         void start(const Spec::Request& request)
         {
-            logger().trace("ExecCmdSvc::Fsm::start (fsm_id={}).", id_);
+            logger().trace("ExecCmdSvc::Fsm::start (fsm_id={}, timeout={}us).", id_, request.timeout_us);
 
             // Immediately complete if there are no nodes to execute the command on.
             //

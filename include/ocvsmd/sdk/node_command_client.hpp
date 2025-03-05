@@ -53,6 +53,8 @@ public:
         using Failure = int;  // `errno`-like error code.
         using Result  = cetl::variant<Success, Failure>;
 
+        Command() = delete;
+
     };  // Command
 
     /// Sends a Cyphal command to the specified Cyphal network nodes.

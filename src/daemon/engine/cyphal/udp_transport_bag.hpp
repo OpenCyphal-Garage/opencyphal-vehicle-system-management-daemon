@@ -95,7 +95,7 @@ public:
         transport_bag->transport_->setTransientErrorHandler([](auto&) { return cetl::nullopt; });
         // transport_bag->transport_->setTransientErrorHandler(TransportHelpers::UdpTransientErrorReporter{});
 
-        common::getLogger("io")->debug("Created UDP transport (ifaces={}", media_collection.count());
+        common::getLogger("io")->debug("Created UDP transport (ifaces={})", media_collection.count());
         return transport_bag;
     }
 

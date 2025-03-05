@@ -6,6 +6,7 @@
 #include "services.hpp"
 
 #include "exec_cmd_service.hpp"
+#include "list_registers_service.hpp"
 #include "svc/svc_helpers.hpp"
 
 namespace ocvsmd
@@ -22,6 +23,7 @@ namespace node
 void registerAllServices(const ScvContext& context)
 {
     ExecCmdService::registerWithContext(context);
+    ListRegistersService::registerWithContext(context);
 }
 
 }  // namespace node

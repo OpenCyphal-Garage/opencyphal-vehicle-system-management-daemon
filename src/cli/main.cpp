@@ -83,7 +83,7 @@ int main(const int argc, const char** const argv)
             return EXIT_FAILURE;
         }
 
-#if 1  // NOLINT
+#if 0  // NOLINT
 
         // Demo of daemon's node command client - sending a command to node 42, 43 & 44.
         {
@@ -153,7 +153,7 @@ int main(const int argc, const char** const argv)
             }
         }
 #endif
-#if 1  // NOLINT
+#if 0  // NOLINT
 
         // Demo of daemon's file server - getting the list of roots.
         {
@@ -174,6 +174,43 @@ int main(const int argc, const char** const argv)
                 for (std::size_t i = 0; i < roots.size(); ++i)
                 {
                     spdlog::info("{:4} → '{}'", i, roots[i]);
+                }
+            }
+        }
+#endif
+#if 1  // NOLINT
+
+        // Demo of daemon's registry client - getting the list of registers from nodes.
+        {
+            using List = ocvsmd::sdk::NodeRegistryClient::List;
+
+            auto registry = daemon->getNodeRegistryClient();
+
+            const std::vector<std::uint16_t> node_ids = {123, 42, 43, 44};
+            auto sender      = registry->list({node_ids.data(), node_ids.size()}, std::chrono::seconds{1});
+            auto list_result = ocvsmd::sdk::sync_wait<List::Result>(executor, std::move(sender));
+            if (const auto* const err = cetl::get_if<List::Failure>(&list_result))
+            {
+                spdlog::error("Failed to list registers: {}", std::strerror(*err));
+            }
+            else
+            {
+                const auto node_id_to_regs = cetl::get<List::Success>(std::move(list_result));
+                spdlog::info("Engine responded with list of nodes (cnt={}):", node_id_to_regs.size());
+                for (const auto& id_and_regs : node_id_to_regs)
+                {
+                    using NodeRegs = List::NodeRegisters;
+
+                    if (const auto* const node_err = cetl::get_if<NodeRegs::Failure>(&id_and_regs.second))
+                    {
+                        spdlog::warn("{:4} → err={}", id_and_regs.first, *node_err);
+                        continue;
+                    }
+                    const auto& node_regs = cetl::get<NodeRegs::Success>(id_and_regs.second);
+                    for (const auto& reg_name : node_regs)
+                    {
+                        spdlog::info("{:4} → '{}'", id_and_regs.first, reg_name);
+                    }
                 }
             }
         }
