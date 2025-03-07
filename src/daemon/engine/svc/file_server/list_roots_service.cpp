@@ -79,7 +79,10 @@ public:
             }
         }
 
-        channel.complete();
+        if (const auto err = channel.complete())
+        {
+            logger_->warn("ListRootsSvc: failed to send ipc completion (err={}).", err);
+        }
     }
 
 private:

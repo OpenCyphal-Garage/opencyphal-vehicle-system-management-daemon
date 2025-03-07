@@ -133,17 +133,18 @@ private:
         }
 
     private:
-        using SetOfNodeIds         = std::unordered_set<std::uint16_t>;
-        using CyphalRegListSvc     = uavcan::_register::List_1_0;
-        using CyphalSvcClient      = libcyphal::presentation::ServiceClient<CyphalRegListSvc>;
-        using CyphalPromise        = libcyphal::presentation::ResponsePromise<CyphalRegListSvc::Response>;
-        using CyphalPromiseFailure = libcyphal::presentation::ResponsePromiseFailure;
+        using SetOfNodeIds = std::unordered_set<std::uint16_t>;
+
+        using CyRegListSvc     = uavcan::_register::List_1_0;
+        using CySvcClient      = libcyphal::presentation::ServiceClient<CyRegListSvc>;
+        using CyPromise        = libcyphal::presentation::ResponsePromise<CyRegListSvc::Response>;
+        using CyPromiseFailure = libcyphal::presentation::ResponsePromiseFailure;
 
         struct CyNodeOp
         {
-            std::uint16_t                 index;
-            CyphalSvcClient               client;
-            cetl::optional<CyphalPromise> promise;
+            std::uint16_t             index;
+            CySvcClient               client;
+            cetl::optional<CyPromise> promise;
         };
 
         common::Logger& logger() const
@@ -168,13 +169,13 @@ private:
 
         void makeCyNodeOp(const std::uint16_t node_id)
         {
-            using CyphalMakeFailure = libcyphal::presentation::Presentation::MakeFailure;
+            using CyMakeFailure = libcyphal::presentation::Presentation::MakeFailure;
 
-            auto cy_make_result = service_.context_.presentation.makeClient<CyphalRegListSvc>(node_id);
-            if (const auto* cy_failure = cetl::get_if<CyphalMakeFailure>(&cy_make_result))
+            auto cy_make_result = service_.context_.presentation.makeClient<CyRegListSvc>(node_id);
+            if (const auto* cy_failure = cetl::get_if<CyMakeFailure>(&cy_make_result))
             {
                 const auto err = failureToErrorCode(*cy_failure);
-                logger().error("ListRegsSvc: failed to make svc client for node {} (err={}, fsm_id={}).",
+                logger().error("ListRegsSvc: failed to make RPC client for node {} (err={}, fsm_id={}).",
                                node_id,
                                err,
                                id_);
@@ -186,7 +187,7 @@ private:
             auto it = node_id_to_op_
                           .emplace(  //
                               node_id,
-                              CyNodeOp{0, cetl::get<CyphalSvcClient>(std::move(cy_make_result)), cetl::nullopt})
+                              CyNodeOp{0, cetl::get<CySvcClient>(std::move(cy_make_result)), cetl::nullopt})
                           .first;
 
             startCyRegListRpcCallFor(node_id, it->second);
@@ -194,14 +195,14 @@ private:
 
         bool startCyRegListRpcCallFor(const std::uint16_t node_id, CyNodeOp& cy_op)
         {
-            const CyphalRegListSvc::Request cy_request{cy_op.index, &memory()};
+            const CyRegListSvc::Request cy_request{cy_op.index, &memory()};
 
             const auto deadline      = service_.context_.executor.now() + timeout_;
             auto       cy_req_result = cy_op.client.request(deadline, cy_request);
-            if (const auto* cy_failure = cetl::get_if<CyphalSvcClient::Failure>(&cy_req_result))
+            if (const auto* cy_failure = cetl::get_if<CySvcClient::Failure>(&cy_req_result))
             {
                 const auto err = failureToErrorCode(*cy_failure);
-                logger().error("ListRegsSvc: failed to send svc request to node {} (err={}, fsm_id={})",
+                logger().error("ListRegsSvc: failed to send RPC request to node {} (err={}, fsm_id={})",
                                node_id,
                                err,
                                id_);
@@ -209,7 +210,7 @@ private:
                 sendErrorResponse(node_id, err);
                 return false;
             }
-            auto cy_promise = cetl::get<CyphalPromise>(std::move(cy_req_result));
+            auto cy_promise = cetl::get<CyPromise>(std::move(cy_req_result));
 
             cy_promise.setCallback([this, node_id](const auto& arg) {
                 //
@@ -220,7 +221,7 @@ private:
             return true;
         }
 
-        void handleNodeResponse(const std::uint16_t node_id, const CyphalPromise::Result& result)
+        void handleNodeResponse(const std::uint16_t node_id, const CyPromise::Result& result)
         {
             const auto it = node_id_to_op_.find(node_id);
             if (it == node_id_to_op_.end())
@@ -229,7 +230,7 @@ private:
             }
             auto& cy_op = it->second;
 
-            if (const auto* success = cetl::get_if<CyphalPromise::Success>(&result))
+            if (const auto* success = cetl::get_if<CyPromise::Success>(&result))
             {
                 // Empty response name means that we've reached the end of the list.
                 //
@@ -257,10 +258,10 @@ private:
                     }
                 }
             }
-            else if (const auto* cy_failure = cetl::get_if<CyphalPromiseFailure>(&result))
+            else if (const auto* cy_failure = cetl::get_if<CyPromiseFailure>(&result))
             {
                 const auto err = failureToErrorCode(*cy_failure);
-                logger().warn("ListRegsSvc: promise failure for node {} (err={}, fsm_id={}).", node_id, err, id_);
+                logger().warn("ListRegsSvc: RPC promise failure for node {} (err={}, fsm_id={}).", node_id, err, id_);
                 sendErrorResponse(node_id, err);
             }
 
@@ -294,12 +295,15 @@ private:
             }
         }
 
-        void complete(const int err)
+        void complete(const int err_code)
         {
             // Cancel anything that might be still pending.
             node_id_to_op_.clear();
 
-            channel_.complete(err);
+            if (const auto err = channel_.complete(err_code))
+            {
+                logger().warn("ListRegsSvc: failed to complete channel (err={}, fsm_id={}).", err, id_);
+            }
 
             service_.releaseFsmBy(id_);
         }

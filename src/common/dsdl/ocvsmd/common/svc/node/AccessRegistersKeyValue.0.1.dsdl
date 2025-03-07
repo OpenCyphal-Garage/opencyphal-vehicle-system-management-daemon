@@ -1,0 +1,4 @@
+uavcan.register.Name.1.0 key
+uavcan.register.Value.1.0 value
+
+@extent 600 * 8

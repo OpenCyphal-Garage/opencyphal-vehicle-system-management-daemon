@@ -34,9 +34,9 @@ public:
             return reference().send(service_id, payload);
         }
 
-        void complete(const int error_code) override
+        CETL_NODISCARD int complete(const int error_code, const bool keep_alive) override
         {
-            reference().complete(error_code);
+            return reference().complete(error_code, keep_alive);
         }
 
         CETL_NODISCARD int event(const Event::Var& event) override
@@ -54,7 +54,7 @@ public:
 
     MOCK_METHOD(void, deinit, (), (const));
     MOCK_METHOD(int, send, (const ServiceDesc::Id service_id, const Payload payload), (override));
-    MOCK_METHOD(void, complete, (const int error_code), (override));
+    MOCK_METHOD(int, complete, (const int error_code, const bool keep_alive), (override));
     MOCK_METHOD(int, event, (const Event::Var& event), (override));
     MOCK_METHOD(void, subscribe, (EventHandler event_handler), (override));
 

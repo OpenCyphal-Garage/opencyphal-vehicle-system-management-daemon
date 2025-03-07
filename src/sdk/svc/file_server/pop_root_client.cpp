@@ -97,9 +97,10 @@ private:
 
 }  // namespace
 
-CETL_NODISCARD PopRootClient::Ptr PopRootClient::make(cetl::pmr::memory_resource&           memory,
-                                                      const common::ipc::ClientRouter::Ptr& ipc_router,
-                                                      const Spec::Request&                  request)
+PopRootClient::Ptr PopRootClient::make(  //
+    cetl::pmr::memory_resource&           memory,
+    const common::ipc::ClientRouter::Ptr& ipc_router,
+    const Spec::Request&                  request)
 {
     return std::make_shared<PopRootClientImpl>(memory, ipc_router, request);
 }

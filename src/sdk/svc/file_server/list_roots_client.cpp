@@ -103,9 +103,10 @@ private:
 
 }  // namespace
 
-CETL_NODISCARD ListRootsClient::Ptr ListRootsClient::make(cetl::pmr::memory_resource&           memory,
-                                                          const common::ipc::ClientRouter::Ptr& ipc_router,
-                                                          const Spec::Request&                  request)
+ListRootsClient::Ptr ListRootsClient::make(  //
+    cetl::pmr::memory_resource&           memory,
+    const common::ipc::ClientRouter::Ptr& ipc_router,
+    const Spec::Request&                  request)
 {
     return std::make_shared<ListRootsClientImpl>(memory, ipc_router, request);
 }

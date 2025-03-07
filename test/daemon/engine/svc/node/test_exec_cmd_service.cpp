@@ -162,7 +162,7 @@ TEST_F(TestExecCmdService, empty_request)
         const ExecCmdSpec::Request request{&mr_};
 
         EXPECT_CALL(gateway_mock, subscribe(_)).Times(1);
-        EXPECT_CALL(gateway_mock, complete(0)).Times(1);
+        EXPECT_CALL(gateway_mock, complete(0, false)).Times(1);
         EXPECT_CALL(gateway_mock, deinit()).Times(1);
         //
         const auto result = tryPerformOnSerialized(request, [&](const auto payload) {
@@ -222,7 +222,7 @@ TEST_F(TestExecCmdService, two_nodes_request)
     });
     scheduler_.scheduleAt(2s, [&](const auto&) {
         //
-        EXPECT_CALL(gateway_mock, complete(0)).Times(1);
+        EXPECT_CALL(gateway_mock, complete(0, false)).Times(1);
         EXPECT_CALL(gateway_mock, deinit()).Times(1);
     });
     scheduler_.scheduleAt(2s + 1ms, [&](const auto&) {
@@ -258,7 +258,7 @@ TEST_F(TestExecCmdService, out_of_memory)
         EXPECT_CALL(cy_transport_mock_, makeRequestTxSession(_)).WillOnce(Return(libcyphal::MemoryError{}));
 
         EXPECT_CALL(gateway_mock, subscribe(_)).Times(1);
-        EXPECT_CALL(gateway_mock, complete(ENOMEM)).Times(1);
+        EXPECT_CALL(gateway_mock, complete(ENOMEM, false)).Times(1);
         EXPECT_CALL(gateway_mock, deinit()).Times(1);
         //
         const auto result = tryPerformOnSerialized(request, [&](const auto payload) {

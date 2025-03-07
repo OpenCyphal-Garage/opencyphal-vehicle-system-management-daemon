@@ -126,10 +126,10 @@ private:
             const SetOfNodeIds unique_node_ids{request.node_ids.begin(), request.node_ids.end()};
 
             const auto deadline = service_.context_.executor.now() + std::chrono::microseconds{request.timeout_us};
-            const CyphalExecCmdSvc::Request cy_request{request.payload.command, request.payload.parameter, &memory()};
+            const CyExecCmdSvc::Request cy_request{request.payload.command, request.payload.parameter, &memory()};
             for (const auto node_id : unique_node_ids)
             {
-                if (const auto err = makeCyphalSvcCallFor(deadline, node_id, cy_request))
+                if (const auto err = makeCySvcCallFor(deadline, node_id, cy_request))
                 {
                     complete(err);
                     return;
@@ -138,16 +138,17 @@ private:
         }
 
     private:
-        using SetOfNodeIds         = std::unordered_set<std::uint16_t>;
-        using CyphalExecCmdSvc     = uavcan::node::ExecuteCommand_1_3;
-        using CyphalSvcClient      = libcyphal::presentation::ServiceClient<CyphalExecCmdSvc>;
-        using CyphalPromise        = libcyphal::presentation::ResponsePromise<CyphalExecCmdSvc::Response>;
-        using CyphalPromiseFailure = libcyphal::presentation::ResponsePromiseFailure;
+        using SetOfNodeIds = std::unordered_set<std::uint16_t>;
+
+        using CyExecCmdSvc     = uavcan::node::ExecuteCommand_1_3;
+        using CySvcClient      = libcyphal::presentation::ServiceClient<CyExecCmdSvc>;
+        using CyPromise        = libcyphal::presentation::ResponsePromise<CyExecCmdSvc::Response>;
+        using CyPromiseFailure = libcyphal::presentation::ResponsePromiseFailure;
 
         struct CyNodeOp
         {
-            CyphalSvcClient client;
-            CyphalPromise   promise;
+            CySvcClient client;
+            CyPromise   promise;
         };
 
         common::Logger& logger() const
@@ -170,47 +171,50 @@ private:
             complete(ECANCELED);
         }
 
-        int makeCyphalSvcCallFor(const libcyphal::TimePoint       deadline,
-                                 const std::uint16_t              node_id,
-                                 const CyphalExecCmdSvc::Request& cy_request)
+        int makeCySvcCallFor(const libcyphal::TimePoint   deadline,
+                             const std::uint16_t          node_id,
+                             const CyExecCmdSvc::Request& cy_request)
         {
-            using CyphalMakeFailure = libcyphal::presentation::Presentation::MakeFailure;
+            using CyMakeFailure = libcyphal::presentation::Presentation::MakeFailure;
 
-            auto cy_make_result = service_.context_.presentation.makeClient<CyphalExecCmdSvc>(node_id);
-            if (const auto* cy_failure = cetl::get_if<CyphalMakeFailure>(&cy_make_result))
+            auto cy_make_result = service_.context_.presentation.makeClient<CyExecCmdSvc>(node_id);
+            if (const auto* cy_failure = cetl::get_if<CyMakeFailure>(&cy_make_result))
             {
                 const auto err = failureToErrorCode(*cy_failure);
-                logger().error("ExecCmdSvc: failed to make svc client for node {} (err={}, fsm_id={}).",
+                logger().error("ExecCmdSvc: failed to make RPC client for node {} (err={}, fsm_id={}).",
                                node_id,
                                err,
                                id_);
                 return err;
             }
-            auto cy_svc_client = cetl::get<CyphalSvcClient>(std::move(cy_make_result));
+            auto cy_svc_client = cetl::get<CySvcClient>(std::move(cy_make_result));
 
             auto cy_req_result = cy_svc_client.request(deadline, cy_request);
-            if (const auto* cy_failure = cetl::get_if<CyphalSvcClient::Failure>(&cy_req_result))
+            if (const auto* cy_failure = cetl::get_if<CySvcClient::Failure>(&cy_req_result))
             {
                 const auto err = failureToErrorCode(*cy_failure);
-                logger().error("ExecCmdSvc: failed to send svc request to node {} (err={}, fsm_id={})",
+                logger().error("ExecCmdSvc: failed to send RPC request to node {} (err={}, fsm_id={})",
                                node_id,
                                err,
                                id_);
                 return err;
             }
-            auto cy_promise = cetl::get<CyphalPromise>(std::move(cy_req_result));
+            auto cy_promise = cetl::get<CyPromise>(std::move(cy_req_result));
 
             cy_promise.setCallback([this, node_id](const auto& arg) {
                 //
-                if (const auto* cy_failure = cetl::get_if<CyphalPromiseFailure>(&arg.result))
+                if (const auto* cy_failure = cetl::get_if<CyPromiseFailure>(&arg.result))
                 {
                     const auto err = failureToErrorCode(*cy_failure);
-                    logger().warn("ExecCmdSvc: promise failure for node {} (err={}, fsm_id={}).", node_id, err, id_);
+                    logger().warn("ExecCmdSvc: RPC promise failure for node {} (err={}, fsm_id={}).",
+                                  node_id,
+                                  err,
+                                  id_);
                 }
-                else if (const auto* success = cetl::get_if<CyphalPromise::Success>(&arg.result))
+                else if (const auto* success = cetl::get_if<CyPromise::Success>(&arg.result))
                 {
                     const auto& res = success->response;
-                    logger().debug("ExecCmdSvc: promise success from node {} (status={}, fsm_id={}).",
+                    logger().debug("ExecCmdSvc: RPC promise success from node {} (status={}, fsm_id={}).",
                                    node_id,
                                    res.status,
                                    id_);
@@ -239,12 +243,15 @@ private:
             return 0;
         }
 
-        void complete(const int err)
+        void complete(const int err_code)
         {
             // Cancel anything that might be still pending.
             node_id_to_op_.clear();
 
-            channel_.complete(err);
+            if (const auto err = channel_.complete(err_code))
+            {
+                logger().warn("ExecCmdSvc: failed to complete channel (err={}, fsm_id={}).", err, id_);
+            }
 
             service_.releaseFsmBy(id_);
         }

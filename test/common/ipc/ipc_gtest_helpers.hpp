@@ -9,10 +9,10 @@
 #include "dsdl_helpers.hpp"
 #include "ipc/ipc_types.hpp"
 
-#include "ocvsmd/common/ipc/RouteChannelEnd_0_1.hpp"
+#include "ocvsmd/common/ipc/RouteChannelEnd_0_2.hpp"
 #include "ocvsmd/common/ipc/RouteChannelMsg_0_1.hpp"
 #include "ocvsmd/common/ipc/RouteConnect_0_1.hpp"
-#include "ocvsmd/common/ipc/Route_0_1.hpp"
+#include "ocvsmd/common/ipc/Route_0_2.hpp"
 
 #include <uavcan/node/Version_1_0.hpp>
 #include <uavcan/primitive/Empty_1_0.hpp>
@@ -62,14 +62,15 @@ inline void PrintTo(const RouteChannelMsg_0_1& msg, std::ostream* os)
         << ", payload_size=" << msg.payload_size << "}";
 }
 
-inline void PrintTo(const RouteChannelEnd_0_1& msg, std::ostream* os)
+inline void PrintTo(const RouteChannelEnd_0_2& msg, std::ostream* os)
 {
-    *os << "RouteChannelEnd_0_1{tag=" << msg.tag << ", err=" << msg.error_code << "}";
+    *os << "RouteChannelEnd_0_2{tag=" << msg.tag << ", err=" << msg.error_code << ", keep_alive=" << msg.keep_alive
+        << "}";
 }
 
-inline void PrintTo(const Route_0_1& route, std::ostream* os)
+inline void PrintTo(const Route_0_2& route, std::ostream* os)
 {
-    *os << "Route_0_1{";
+    *os << "Route_0_2{";
     cetl::visit([os](const auto& v) { PrintTo(v, os); }, route.union_value);
     *os << "}";
 }
@@ -78,18 +79,18 @@ inline void PrintTo(const Route_0_1& route, std::ostream* os)
 
 inline bool operator==(const RouteConnect_0_1& lhs, const RouteConnect_0_1& rhs)
 {
-    return lhs.version.major == rhs.version.major && lhs.version.minor == rhs.version.minor;
+    return (lhs.version.major == rhs.version.major) && (lhs.version.minor == rhs.version.minor);
 }
 
 inline bool operator==(const RouteChannelMsg_0_1& lhs, const RouteChannelMsg_0_1& rhs)
 {
-    return lhs.tag == rhs.tag && lhs.sequence == rhs.sequence && lhs.service_id == rhs.service_id &&
-           lhs.payload_size == rhs.payload_size;
+    return (lhs.tag == rhs.tag) && (lhs.sequence == rhs.sequence) && (lhs.service_id == rhs.service_id) &&
+           (lhs.payload_size == rhs.payload_size);
 }
 
-inline bool operator==(const RouteChannelEnd_0_1& lhs, const RouteChannelEnd_0_1& rhs)
+inline bool operator==(const RouteChannelEnd_0_2& lhs, const RouteChannelEnd_0_2& rhs)
 {
-    return lhs.tag == rhs.tag && lhs.error_code == rhs.error_code;
+    return (lhs.tag == rhs.tag) && (lhs.error_code == rhs.error_code) && (lhs.keep_alive == rhs.keep_alive);
 }
 
 // MARK: - GTest Matchers:
@@ -236,7 +237,7 @@ inline auto PayloadOfRouteConnect(cetl::pmr::memory_resource& mr,
                                   ErrorCode                   error_code = ErrorCode::Success)
 {
     const RouteConnect_0_1 route_conn{{ver_major, ver_minor, &mr}, static_cast<std::int32_t>(error_code), &mr};
-    return PayloadVariantWith<Route_0_1>(mr, testing::VariantWith<RouteConnect_0_1>(route_conn));
+    return PayloadVariantWith<Route_0_2>(mr, testing::VariantWith<RouteConnect_0_1>(route_conn));
 }
 
 template <typename Msg>
@@ -255,15 +256,16 @@ auto PayloadOfRouteChannelMsg(const Msg&                  msg,
                         return 0;
                     }),
                 0);
-    return PayloadVariantWith<Route_0_1>(mr, testing::VariantWith<RouteChannelMsg_0_1>(route_ch_msg));
+    return PayloadVariantWith<Route_0_2>(mr, testing::VariantWith<RouteChannelMsg_0_1>(route_ch_msg));
 }
 
 inline auto PayloadOfRouteChannelEnd(cetl::pmr::memory_resource& mr,  //
                                      const std::uint64_t         tag,
-                                     const ErrorCode             error_code)
+                                     const ErrorCode             error_code,
+                                     const bool                  keep_alive = false)
 {
-    const RouteChannelEnd_0_1 ch_end{{tag, static_cast<std::int32_t>(error_code), &mr}, &mr};
-    return PayloadVariantWith<Route_0_1>(mr, testing::VariantWith<RouteChannelEnd_0_1>(ch_end));
+    const RouteChannelEnd_0_2 ch_end{{tag, static_cast<std::int32_t>(error_code), keep_alive, &mr}, &mr};
+    return PayloadVariantWith<Route_0_2>(mr, testing::VariantWith<RouteChannelEnd_0_2>(ch_end));
 }
 
 }  // namespace ipc

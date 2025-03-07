@@ -50,14 +50,15 @@ public:
     {
         struct Connected final
         {};
-        struct Completed final
-        {
-            ErrorCode error_code;
-        };
         struct Message final
         {
             std::uint64_t sequence;
             Payload       payload;
+        };
+        struct Completed final
+        {
+            ErrorCode error_code;
+            bool      keep_alive;
         };
 
         using Var = cetl::variant<Connected, Message, Completed>;
@@ -73,7 +74,7 @@ public:
     Gateway& operator=(Gateway&&) noexcept = delete;
 
     CETL_NODISCARD virtual int send(const ServiceDesc::Id service_id, const Payload payload) = 0;
-    virtual void               complete(const int error_code)                                = 0;
+    CETL_NODISCARD virtual int complete(const int error_code, const bool keep_alive)         = 0;
     CETL_NODISCARD virtual int event(const Event::Var& event)                                = 0;
     virtual void               subscribe(EventHandler event_handler)                         = 0;
 

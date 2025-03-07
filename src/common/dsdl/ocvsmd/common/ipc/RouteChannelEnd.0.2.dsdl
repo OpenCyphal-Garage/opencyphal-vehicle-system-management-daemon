@@ -1,4 +1,5 @@
 uint64 tag
 int32 error_code
+bool keep_alive
 
 @extent 32 * 8

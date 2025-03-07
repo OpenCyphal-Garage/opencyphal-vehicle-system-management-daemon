@@ -9,7 +9,12 @@
 #include "logging.hpp"
 #include "sdk_factory.hpp"
 #include "svc/as_sender.hpp"
+#include "svc/node/access_registers_client.hpp"
+#include "svc/node/access_registers_spec.hpp"
 #include "svc/node/list_registers_client.hpp"
+#include "svc/node/list_registers_spec.hpp"
+
+#include <uavcan/_register/Name_1_0.hpp>
 
 #include <cetl/pf17/cetlpf.hpp>
 
@@ -43,10 +48,36 @@ public:
         Request request{std::max<std::uint64_t>(0, timeout.count()),
                         {node_ids.begin(), node_ids.end(), &memory_},
                         &memory_};
-        auto    svc_client = ListRegistersClient::make(memory_, ipc_router_, std::move(request));
+        auto    svc_client = ListRegistersClient::make(ipc_router_, std::move(request));
 
         return std::make_unique<svc::AsSender<ListRegistersClient, ListRegistersClient::Result>>(  //
             "NodeRegistryClient::list",
+            std::move(svc_client),
+            logger_);
+    }
+
+    SenderOf<Access::Result>::Ptr read(const cetl::span<const std::uint16_t>     node_ids,
+                                       const cetl::span<const cetl::string_view> registers,
+                                       const std::chrono::microseconds           timeout) override
+    {
+        using RegKey                = uavcan::_register::Name_1_0;
+        using AccessRegistersClient = svc::node::AccessRegistersClient;
+
+        logger_->trace("NodeRegistryClient: Making sender of `read()`.");
+
+        for (const auto& reg_key : registers)
+        {
+            if (reg_key.size() > RegKey::_traits_::ArrayCapacity::name)
+            {
+                logger_->error("Too long register key '{}'.", reg_key);
+                return just<Access::Result>(EINVAL);
+            }
+        }
+
+        auto svc_client = AccessRegistersClient::make(memory_, ipc_router_, node_ids, registers, timeout);
+
+        return std::make_unique<svc::AsSender<AccessRegistersClient, AccessRegistersClient::Result>>(  //
+            "NodeRegistryClient::read",
             std::move(svc_client),
             logger_);
     }

@@ -32,15 +32,14 @@ public:
     {
         struct Connected final
         {};
-        struct Disconnected final
-        {};
         struct Message final
         {
             Payload payload;
+        };
+        struct Disconnected final
+        {};
 
-        };  // Message
-
-        using Var = cetl::variant<Message, Connected, Disconnected>;
+        using Var = cetl::variant<Connected, Message, Disconnected>;
 
     };  // Event
 

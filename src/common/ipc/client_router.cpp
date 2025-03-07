@@ -12,10 +12,10 @@
 #include "logging.hpp"
 #include "pipe/client_pipe.hpp"
 
-#include "ocvsmd/common/ipc/RouteChannelEnd_0_1.hpp"
+#include "ocvsmd/common/ipc/RouteChannelEnd_0_2.hpp"
 #include "ocvsmd/common/ipc/RouteChannelMsg_0_1.hpp"
 #include "ocvsmd/common/ipc/RouteConnect_0_1.hpp"
-#include "ocvsmd/common/ipc/Route_0_1.hpp"
+#include "ocvsmd/common/ipc/Route_0_2.hpp"
 #include "uavcan/primitive/Empty_1_0.hpp"
 
 #include <cetl/cetl.hpp>
@@ -150,7 +150,7 @@ private:
                 return static_cast<int>(ErrorCode::Shutdown);
             }
 
-            Route_0_1 route{&router_.memory_};
+            Route_0_2 route{&router_.memory_};
 
             auto& channel_msg        = route.set_channel_msg();
             channel_msg.tag          = endpoint_.tag;
@@ -164,9 +164,36 @@ private:
             });
         }
 
-        void complete(const int error_code) override
+        CETL_NODISCARD int complete(const int error_code, const bool keep_alive) override
         {
+            if (!router_.isConnected(endpoint_))
+            {
+                return static_cast<int>(ErrorCode::NotConnected);
+            }
+            if (!router_.isRegisteredGateway(endpoint_))
+            {
+                return static_cast<int>(ErrorCode::Shutdown);
+            }
+
             completion_error_code_ = error_code;
+
+            // Zero `next_sequence_` means that this gateway was never used for sending messages,
+            // and so remote router never knew about it (its tag) - no need to post "ChEnd" event.
+            if (next_sequence_ == 0)
+            {
+                return 0;
+            }
+
+            Route_0_2 route{&router_.memory_};
+            auto&     channel_end  = route.set_channel_end();
+            channel_end.tag        = endpoint_.tag;
+            channel_end.error_code = error_code;
+            channel_end.keep_alive = keep_alive;
+
+            return tryPerformOnSerialized(route, [this](const auto payload) {
+                //
+                return router_.client_pipe_->send({{payload}});
+            });
         }
 
         CETL_NODISCARD int event(const Event::Var& event) override
@@ -268,10 +295,11 @@ private:
         //
         if (was_registered && send_ch_end && isConnected(endpoint))
         {
-            Route_0_1 route{&memory_};
+            Route_0_2 route{&memory_};
             auto&     channel_end  = route.set_channel_end();
             channel_end.tag        = endpoint.tag;
             channel_end.error_code = completion_err;
+            channel_end.keep_alive = false;
 
             const int error = tryPerformOnSerialized(route, [this](const auto payload) {
                 //
@@ -289,7 +317,7 @@ private:
         // It's not enough to consider the server route connected by the pipe event.
         // We gonna initiate `RouteConnect` negotiation (see `handleRouteConnect`).
         //
-        Route_0_1 route{&memory_};
+        Route_0_2 route{&memory_};
         auto&     route_conn     = route.set_connect();
         route_conn.version.major = VERSION_MAJOR;
         route_conn.version.minor = VERSION_MINOR;
@@ -302,7 +330,7 @@ private:
 
     CETL_NODISCARD int handlePipeEvent(const pipe::ClientPipe::Event::Message& msg)
     {
-        Route_0_1  route_msg{&memory_};
+        Route_0_2  route_msg{&memory_};
         const auto result_size = tryDeserializePayload(msg.payload, route_msg);
         if (!result_size.has_value())
         {
@@ -326,7 +354,7 @@ private:
                     //
                     return handleRouteChannelMsg(route_ch_msg, msg.payload);
                 },
-                [this](const RouteChannelEnd_0_1& route_ch_end) {
+                [this](const RouteChannelEnd_0_2& route_ch_end) {
                     //
                     return handleRouteChannelEnd(route_ch_end);
                 }),
@@ -349,7 +377,9 @@ private:
             {
                 if (const auto gateway = tag_to_gw.second.lock())
                 {
-                    const int err = gateway->event(detail::Gateway::Event::Completed{ErrorCode::Disconnected});
+                    constexpr detail::Gateway::Event::Completed completed{ErrorCode::Disconnected, false};
+
+                    const int err = gateway->event(completed);
                     (void) err;  // Best efforts strategy.
                 }
             }
@@ -410,17 +440,25 @@ private:
         return 0;
     }
 
-    CETL_NODISCARD int handleRouteChannelEnd(const RouteChannelEnd_0_1& route_ch_end)
+    CETL_NODISCARD int handleRouteChannelEnd(const RouteChannelEnd_0_2& route_ch_end)
     {
-        logger_->debug("Route Ch End (tag={}, err={}).", route_ch_end.tag, route_ch_end.error_code);
+        logger_->debug("Route Ch End (tag={}, err={}, keep_alive={}).",
+                       route_ch_end.tag,
+                       route_ch_end.error_code,
+                       route_ch_end.keep_alive);
 
         const Endpoint endpoint{route_ch_end.tag};
         const auto     error_code = static_cast<ErrorCode>(route_ch_end.error_code);
+        const bool     keep_alive = route_ch_end.keep_alive;
 
-        return findAndActOnRegisteredGateway(endpoint, [this, error_code](auto& gateway, auto found_it) {
+        return findAndActOnRegisteredGateway(endpoint, [this, error_code, keep_alive](auto& gateway, auto found_it) {
             //
-            map_of_gateways_.erase(found_it);
-            return gateway.event(detail::Gateway::Event::Completed{error_code});
+            if (!keep_alive)
+            {
+                map_of_gateways_.erase(found_it);
+            }
+            const detail::Gateway::Event::Completed completed{error_code, keep_alive};
+            return gateway.event(completed);
         });
     }
 

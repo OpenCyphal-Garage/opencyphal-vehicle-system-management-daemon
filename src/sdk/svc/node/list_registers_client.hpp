@@ -11,10 +11,8 @@
 #include "svc/node/list_registers_spec.hpp"
 
 #include <cetl/cetl.hpp>
-#include <cetl/pf17/cetlpf.hpp>
 
 #include <memory>
-#include <unordered_map>
 #include <utility>
 
 namespace ocvsmd
@@ -38,9 +36,7 @@ public:
     using Success = NodeRegistryClient::List::Success;
     using Failure = NodeRegistryClient::List::Failure;
 
-    CETL_NODISCARD static Ptr make(cetl::pmr::memory_resource&           memory,
-                                   const common::ipc::ClientRouter::Ptr& ipc_router,
-                                   Spec::Request&&                       request);
+    CETL_NODISCARD static Ptr make(const common::ipc::ClientRouter::Ptr& ipc_router, Spec::Request&& request);
 
     ListRegistersClient(ListRegistersClient&&)                 = delete;
     ListRegistersClient(const ListRegistersClient&)            = delete;

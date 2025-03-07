@@ -8,6 +8,8 @@
 
 #include "execution.hpp"
 
+#include <uavcan/_register/Value_1_0.hpp>
+
 #include <cetl/pf20/cetlpf.hpp>
 
 #include <chrono>
@@ -78,6 +80,35 @@ public:
     ///
     virtual SenderOf<List::Result>::Ptr list(const cetl::span<const std::uint16_t> node_ids,
                                              const std::chrono::microseconds       timeout) = 0;
+
+    struct Access final
+    {
+        using RegValue = uavcan::_register::Value_1_0;
+
+        struct RegNameValue final
+        {
+            std::string                  name;
+            cetl::variant<RegValue, int> value;  // `errno`-like error code.
+        };
+
+        struct NodeRegisters final
+        {
+            using Success = std::vector<RegNameValue>;
+            using Failure = int;  // `errno`-like error code.
+            using Result  = cetl::variant<Success, Failure>;
+
+            NodeRegisters() = delete;
+        };
+
+        using Success = std::unordered_map<std::uint16_t, NodeRegisters::Result>;
+        using Failure = int;  // `errno`-like error code.
+        using Result  = cetl::variant<Success, Failure>;
+
+        Access() = delete;
+    };
+    virtual SenderOf<Access::Result>::Ptr read(const cetl::span<const std::uint16_t>     node_ids,
+                                               const cetl::span<const cetl::string_view> registers,
+                                               const std::chrono::microseconds           timeout) = 0;
 
 protected:
     NodeRegistryClient() = default;

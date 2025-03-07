@@ -39,18 +39,17 @@ public:
         {
             ClientId client_id;
         };
-        struct Disconnected final
-        {
-            ClientId client_id;
-        };
         struct Message final
         {
             ClientId client_id;
             Payload  payload;
+        };
+        struct Disconnected final
+        {
+            ClientId client_id;
+        };
 
-        };  // Message
-
-        using Var = cetl::variant<Message, Connected, Disconnected>;
+        using Var = cetl::variant<Connected, Message, Disconnected>;
 
     };  // Event
 

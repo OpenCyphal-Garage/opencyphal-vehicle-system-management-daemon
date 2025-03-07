@@ -87,7 +87,7 @@ int SocketBase::receiveData(IoState& io_state) const
         CETL_DEBUG_ASSERT(io_state.rx_partial_size < sizeof(msg_header), "");
         if (io_state.rx_partial_size < sizeof(msg_header))
         {
-            // Try read remaining part of the message header.
+            // Try to read the remaining part of the message header.
             //
             ssize_t bytes_read = 0;
             if (const auto err = platform::posixSyscallError([&io_state, &bytes_read, &msg_header] {
@@ -107,7 +107,16 @@ int SocketBase::receiveData(IoState& io_state) const
                     logger_->trace("Msg header read would block (fd={}).", io_state.fd.get());
                     return 0;
                 }
-                logger_->error("Failed to read msg header (fd={}): {}.", io_state.fd.get(), std::strerror(err));
+                if (errno == ECONNRESET)
+                {
+                    logger_->debug("Connection reset by peer (fd={}).", io_state.fd.get());
+                    return -1;  // EOF
+                }
+
+                logger_->error("Failed to read msg header (fd={}, err={}): {}.",
+                               io_state.fd.get(),
+                               err,
+                               std::strerror(err));
                 return err;
             }
 

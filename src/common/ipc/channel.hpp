@@ -39,6 +39,10 @@ public:
     {
         /// Channel completion error code. Zero means success.
         ErrorCode error_code;
+
+        /// If `true` then it marks that all incoming messages have been received,
+        /// but the channel is still alive and could be used for sending outgoing messages.
+        bool keep_alive;
     };
 
     /// Builds a service ID from either the service name (if not empty), or message type name.
@@ -105,9 +109,9 @@ public:
             });
     }
 
-    void complete(const int error_code = 0)
+    CETL_NODISCARD int complete(const int error_code = 0, const bool keep_alive = false)
     {
-        return gateway_->complete(error_code);
+        return gateway_->complete(error_code, keep_alive);
     }
 
     void subscribe(EventHandler event_handler)
@@ -158,7 +162,7 @@ private:
 
         CETL_NODISCARD int operator()(const GatewayEvent::Completed& completed) const
         {
-            ch_event_handler(Completed{completed.error_code});
+            ch_event_handler(Completed{completed.error_code, completed.keep_alive});
             return 0;
         }
 
@@ -201,7 +205,10 @@ struct fmt::formatter<ocvsmd::common::ipc::AnyChannel::Completed> : formatter<st
 {
     auto format(ocvsmd::common::ipc::AnyChannel::Completed completed, format_context& ctx) const
     {
-        return format_to(ctx.out(), "Completed(err={})", static_cast<int>(completed.error_code));
+        return format_to(ctx.out(),
+                         "Completed(err={}, keep_alive={})",
+                         static_cast<int>(completed.error_code),
+                         completed.keep_alive);
     }
 };
 // NOLINTEND

@@ -1,0 +1,15 @@
+@union
+
+uavcan.primitive.Empty.1.0 empty
+AccessRegistersScope.0.1 scope
+AccessRegistersKeyValue.0.1 register
+
+@sealed
+
+---
+
+int32 error_code
+uint16 node_id
+AccessRegistersKeyValue.0.1 register
+
+@extent 700 * 8

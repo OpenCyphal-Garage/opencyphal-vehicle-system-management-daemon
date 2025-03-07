@@ -12,8 +12,11 @@
 #include "logging.hpp"
 #include "sdk_factory.hpp"
 #include "svc/file_server/list_roots_client.hpp"
+#include "svc/file_server/list_roots_spec.hpp"
 #include "svc/file_server/pop_root_client.hpp"
+#include "svc/file_server/pop_root_spec.hpp"
 #include "svc/file_server/push_root_client.hpp"
+#include "svc/file_server/push_root_spec.hpp"
 
 #include <string>
 

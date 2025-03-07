@@ -18,7 +18,6 @@
 
 #include <functional>
 #include <memory>
-#include <unordered_map>
 #include <utility>
 
 namespace ocvsmd
@@ -103,9 +102,10 @@ private:
 
 }  // namespace
 
-CETL_NODISCARD ExecCmdClient::Ptr ExecCmdClient::make(cetl::pmr::memory_resource&           memory,
-                                                      const common::ipc::ClientRouter::Ptr& ipc_router,
-                                                      Spec::Request&&                       request)
+ExecCmdClient::Ptr ExecCmdClient::make(  //
+    cetl::pmr::memory_resource&           memory,
+    const common::ipc::ClientRouter::Ptr& ipc_router,
+    Spec::Request&&                       request)
 {
     return std::make_shared<ExecCmdClientImpl>(memory, ipc_router, std::move(request));
 }

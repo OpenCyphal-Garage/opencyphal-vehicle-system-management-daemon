@@ -15,7 +15,7 @@
 
 #include "ocvsmd/common/ipc/RouteChannelMsg_0_1.hpp"
 #include "ocvsmd/common/ipc/RouteConnect_0_1.hpp"
-#include "ocvsmd/common/ipc/Route_0_1.hpp"
+#include "ocvsmd/common/ipc/Route_0_2.hpp"
 #include "ocvsmd/common/svc/node/ExecCmd_0_1.hpp"
 
 #include <cetl/pf17/cetlpf.hpp>
@@ -44,7 +44,7 @@ using testing::StrictMock;
 using testing::VariantWith;
 using testing::MockFunction;
 
-// NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
+// NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers, bugprone-unchecked-optional-access)
 
 class TestClientRouter : public testing::Test
 {
@@ -72,7 +72,7 @@ protected:
             .WillOnce(Return(0));
         client_pipe_mock.event_handler_(pipe::ClientPipe::Event::Connected{});
 
-        Route_0_1 route{&mr_};
+        Route_0_2 route{&mr_};
         auto&     rt_conn     = route.set_connect();
         rt_conn.version.major = ver_major;
         rt_conn.version.minor = ver_minor;
@@ -94,7 +94,7 @@ protected:
     {
         using ocvsmd::common::tryPerformOnSerialized;
 
-        Route_0_1 route{&mr_};
+        Route_0_2 route{&mr_};
         auto&     channel_msg  = route.set_channel_msg();
         channel_msg.tag        = tag;
         channel_msg.sequence   = seq++;
@@ -110,6 +110,26 @@ protected:
                 const Payload payload{buffer.data(), buffer.size()};
                 return client_pipe_mock.event_handler_(pipe::ClientPipe::Event::Message{payload});
             });
+        });
+        EXPECT_THAT(result, 0);
+    }
+
+    void emulateRouteChannelEnd(pipe::ClientPipeMock& client_pipe_mock,
+                                const std::uint64_t   tag,
+                                const ErrorCode       error_code = ErrorCode::Success,
+                                const bool            keep_alive = false)
+    {
+        using ocvsmd::common::tryPerformOnSerialized;
+
+        Route_0_2 route{&mr_};
+        auto&     channel_end  = route.set_channel_end();
+        channel_end.tag        = tag;
+        channel_end.error_code = static_cast<std::int32_t>(error_code);
+        channel_end.keep_alive = keep_alive;
+
+        const int result = tryPerformOnSerialized(route, [&](const auto payload) {
+            //
+            return client_pipe_mock.event_handler_(pipe::ClientPipe::Event::Message{payload});
         });
         EXPECT_THAT(result, 0);
     }
@@ -173,7 +193,7 @@ TEST_F(TestClientRouter, makeChannel)
     (void) channel;
 }
 
-TEST_F(TestClientRouter, makeChannel_send)
+TEST_F(TestClientRouter, channel_send)
 {
     using Msg     = ocvsmd::common::svc::node::ExecCmd::Request_0_1;
     using Channel = Channel<Msg, Msg>;
@@ -191,13 +211,11 @@ TEST_F(TestClientRouter, makeChannel_send)
 
     auto channel = client_router->makeChannel<Channel>();
 
-    const Msg msg{&mr_};
-    EXPECT_THAT(channel.send(msg), static_cast<int>(ErrorCode::NotConnected));
-
     emulateRouteConnect(client_pipe_mock);
 
-    const std::uint64_t tag = 0;
-    std::uint64_t       seq = 0;
+    constexpr std::uint64_t tag = 0;
+    std::uint64_t           seq = 0;
+    const Msg               msg{&mr_};
     EXPECT_CALL(client_pipe_mock, send(PayloadOfRouteChannelMsg(msg, mr_, tag, seq++)))  //
         .WillOnce(Return(0));
     EXPECT_THAT(channel.send(msg), 0);
@@ -210,7 +228,59 @@ TEST_F(TestClientRouter, makeChannel_send)
         .WillOnce(Return(0));
 }
 
-TEST_F(TestClientRouter, makeChannel_receive_events)
+TEST_F(TestClientRouter, channel_send_after_end)
+{
+    using Msg     = ocvsmd::common::svc::node::ExecCmd::Request_0_1;
+    using Channel = Channel<Msg, Msg>;
+
+    StrictMock<pipe::ClientPipeMock> client_pipe_mock;
+    EXPECT_CALL(client_pipe_mock, deinit()).Times(1);
+
+    const auto client_router = ClientRouter::make(  //
+        mr_,
+        std::make_unique<pipe::ClientPipeMock::Wrapper>(client_pipe_mock));
+    ASSERT_THAT(client_router, NotNull());
+
+    EXPECT_CALL(client_pipe_mock, start(_)).Times(1);
+    EXPECT_THAT(client_router->start(), 0);
+
+    StrictMock<MockFunction<void(const Channel::EventVar&)>> ch_event_mock;
+
+    auto channel = client_router->makeChannel<Channel>();
+    channel.subscribe(ch_event_mock.AsStdFunction());
+
+    const Msg msg{&mr_};
+    EXPECT_THAT(channel.send(msg), static_cast<int>(ErrorCode::NotConnected));
+    EXPECT_THAT(channel.complete(), static_cast<int>(ErrorCode::NotConnected));
+
+    EXPECT_CALL(ch_event_mock, Call(VariantWith<Channel::Connected>(_))).Times(1);
+    emulateRouteConnect(client_pipe_mock);
+
+    // Emulate that server posted final `RouteChannelEnd(keep-alive)`.
+    //
+    constexpr std::uint64_t tag = 0;
+    EXPECT_CALL(ch_event_mock, Call(VariantWith<Channel::Completed>(_))).Times(1);
+    emulateRouteChannelEnd(client_pipe_mock, tag, ErrorCode::Success, true);
+
+    std::uint64_t seq = 0;
+    EXPECT_CALL(client_pipe_mock, send(PayloadOfRouteChannelMsg(msg, mr_, tag, seq++)))  //
+        .WillOnce(Return(0));
+    EXPECT_THAT(channel.send(msg), 0);
+    //
+    EXPECT_CALL(client_pipe_mock, send(PayloadOfRouteChannelEnd(mr_, tag, ErrorCode::Success, true)))  //
+        .WillOnce(Return(0));
+    EXPECT_THAT(channel.complete(0, true), 0);
+
+    // Emulate that server posted final `RouteChannelEnd(keep-alive)`.
+    //
+    EXPECT_CALL(ch_event_mock, Call(VariantWith<Channel::Completed>(_))).Times(1);
+    emulateRouteChannelEnd(client_pipe_mock, tag, ErrorCode::Success, false);
+
+    EXPECT_THAT(channel.send(msg), static_cast<int>(ErrorCode::Shutdown));
+    EXPECT_THAT(channel.complete(), static_cast<int>(ErrorCode::Shutdown));
+}
+
+TEST_F(TestClientRouter, channel_receive_events)
 {
     using Msg     = ocvsmd::common::svc::node::ExecCmd::Request_0_1;
     using Channel = Channel<Msg, Msg>;
@@ -261,6 +331,37 @@ TEST_F(TestClientRouter, makeChannel_receive_events)
     client_pipe_mock.event_handler_(pipe::ClientPipe::Event::Disconnected{});
 }
 
-// NOLINTEND(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
+TEST_F(TestClientRouter, channel_unsolicited)
+{
+    using Msg     = ocvsmd::common::svc::node::ExecCmd::Request_0_1;
+    using Channel = Channel<Msg, Msg>;
+
+    StrictMock<pipe::ClientPipeMock> client_pipe_mock;
+    EXPECT_CALL(client_pipe_mock, deinit()).Times(1);
+
+    const auto client_router = ClientRouter::make(  //
+        mr_,
+        std::make_unique<pipe::ClientPipeMock::Wrapper>(client_pipe_mock));
+    ASSERT_THAT(client_router, NotNull());
+
+    EXPECT_CALL(client_pipe_mock, start(_)).Times(1);
+    EXPECT_THAT(client_router->start(), 0);
+
+    StrictMock<MockFunction<void(const Channel::EventVar&)>> ch_event_mock;
+
+    auto channel = client_router->makeChannel<Channel>();
+    channel.subscribe(ch_event_mock.AsStdFunction());
+
+    EXPECT_CALL(ch_event_mock, Call(VariantWith<Channel::Connected>(_))).Times(1);
+    emulateRouteConnect(client_pipe_mock);
+
+    // Emulate that server posted `RouteChannelMsg` on unknown tag.
+    //
+    constexpr std::uint64_t tag = 0;
+    std::uint64_t           seq = 0;
+    emulateRouteChannelMsg(client_pipe_mock, tag + 1, Channel::Input{&mr_}, seq);
+}
+
+// NOLINTEND(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers, bugprone-unchecked-optional-access)
 
 }  // namespace
