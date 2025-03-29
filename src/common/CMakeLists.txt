@@ -17,7 +17,8 @@ set(dsdl_ocvsmd_files
         ${dsdl_ocvsmd_dir}/common/svc/node/ListRegisters.0.1.dsdl
         ${dsdl_ocvsmd_dir}/common/svc/node/UavcanNodeExecCmdReq.0.1.dsdl
         ${dsdl_ocvsmd_dir}/common/svc/node/UavcanNodeExecCmdRes.0.1.dsdl
-        ${dsdl_ocvsmd_dir}/common/svc/relay/CreateRawSub.0.1.dsdl
+        ${dsdl_ocvsmd_dir}/common/svc/relay/RawPublisher.0.1.dsdl
+        ${dsdl_ocvsmd_dir}/common/svc/relay/RawSubscriber.0.1.dsdl
 )
 
 add_cyphal_library(

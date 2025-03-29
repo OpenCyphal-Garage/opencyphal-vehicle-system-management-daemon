@@ -1,0 +1,4 @@
+uint64 extent_size
+uint16 subject_id
+
+@extent 32 * 8

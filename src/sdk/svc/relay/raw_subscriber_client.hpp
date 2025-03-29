@@ -3,13 +3,13 @@
 // SPDX-License-Identifier: MIT
 //
 
-#ifndef OCVSMD_SDK_SVC_RELAY_CREATE_RAW_SUB_CLIENT_HPP_INCLUDED
-#define OCVSMD_SDK_SVC_RELAY_CREATE_RAW_SUB_CLIENT_HPP_INCLUDED
+#ifndef OCVSMD_SDK_SVC_RELAY_RAW_SUBSCRIBER_CLIENT_HPP_INCLUDED
+#define OCVSMD_SDK_SVC_RELAY_RAW_SUBSCRIBER_CLIENT_HPP_INCLUDED
 
 #include "ipc/client_router.hpp"
 #include "ocvsmd/sdk/defines.hpp"
 #include "ocvsmd/sdk/node_pub_sub.hpp"
-#include "svc/relay/create_raw_sub_spec.hpp"
+#include "svc/relay/raw_subscriber_spec.hpp"
 
 #include <cetl/pf17/cetlpf.hpp>
 
@@ -25,13 +25,13 @@ namespace svc
 namespace relay
 {
 
-/// Defines interface of the 'Relay: Create Raw Subscriber' service client.
+/// Defines interface of the 'Relay: Raw Subscriber' service client.
 ///
-class CreateRawSubClient
+class RawSubscriberClient
 {
 public:
-    using Ptr  = std::shared_ptr<CreateRawSubClient>;
-    using Spec = common::svc::relay::CreateRawSubSpec;
+    using Ptr  = std::shared_ptr<RawSubscriberClient>;
+    using Spec = common::svc::relay::RawSubscriberSpec;
 
     using Success = RawSubscriber::Ptr;
     using Failure = Error;
@@ -41,12 +41,12 @@ public:
                                    const common::ipc::ClientRouter::Ptr& ipc_router,
                                    const Spec::Request&                  request);
 
-    CreateRawSubClient(CreateRawSubClient&&)                 = delete;
-    CreateRawSubClient(const CreateRawSubClient&)            = delete;
-    CreateRawSubClient& operator=(CreateRawSubClient&&)      = delete;
-    CreateRawSubClient& operator=(const CreateRawSubClient&) = delete;
+    RawSubscriberClient(RawSubscriberClient&&)                 = delete;
+    RawSubscriberClient(const RawSubscriberClient&)            = delete;
+    RawSubscriberClient& operator=(RawSubscriberClient&&)      = delete;
+    RawSubscriberClient& operator=(const RawSubscriberClient&) = delete;
 
-    virtual ~CreateRawSubClient() = default;
+    virtual ~RawSubscriberClient() = default;
 
     template <typename Receiver>
     void submit(Receiver&& receiver)
@@ -58,15 +58,15 @@ public:
     }
 
 protected:
-    CreateRawSubClient() = default;
+    RawSubscriberClient() = default;
 
     virtual void submitImpl(std::function<void(Result&&)>&& receiver) = 0;
 
-};  // CreateRawSubClient
+};  // RawSubscriberClient
 
 }  // namespace relay
 }  // namespace svc
 }  // namespace sdk
 }  // namespace ocvsmd
 
-#endif  // OCVSMD_SDK_SVC_RELAY_CREATE_RAW_SUB_CLIENT_HPP_INCLUDED
+#endif  // OCVSMD_SDK_SVC_RELAY_RAW_SUBSCRIBER_CLIENT_HPP_INCLUDED

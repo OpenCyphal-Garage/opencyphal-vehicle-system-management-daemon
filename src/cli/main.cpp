@@ -14,12 +14,14 @@
 #include <ocvsmd/sdk/node_command_client.hpp>
 
 #include <uavcan/node/Heartbeat_1_0.hpp>
+#include <uavcan/time/Synchronization_1_0.hpp>
 
 #include <cetl/pf17/cetlpf.hpp>
 #include <cetl/pf20/cetlpf.hpp>
 
 #include <spdlog/spdlog.h>
 
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
@@ -35,6 +37,8 @@
 namespace
 {
 
+using ocvsmd::sdk::Error;
+using ocvsmd::sdk::OptError;
 using ocvsmd::sdk::Daemon;
 using ocvsmd::sdk::sync_wait;
 using Executor = ocvsmd::platform::SingleThreadedExecutor;
@@ -162,7 +166,7 @@ void logHeartbeat(const uavcan::node::Heartbeat_1_0&               hb,
     if (const auto node_id = opt_node_id)
     {
         spdlog::info(  //
-            "❤️ heartbeat from {} node: uptime={} sec, health={}, mode={}, vendor_status={} (cy_priority={}).",
+            "❤️ heartbeat from {} node: uptime={}s, health={}, mode={}, vendor_status={} (cy_priority={}).",
             *node_id,
             hb.uptime,
             static_cast<int>(hb.health.value),
@@ -173,7 +177,7 @@ void logHeartbeat(const uavcan::node::Heartbeat_1_0&               hb,
     else
     {
         spdlog::info(  //
-            "🖤 heartbeat from anonymous node: uptime={} sec, health={}, mode={}, vendor_status={} (cy_priority={}).",
+            "🖤 heartbeat from anonymous node: uptime={}s, health={}, mode={}, vendor_status={} (cy_priority={}).",
             hb.uptime,
             static_cast<int>(hb.health.value),
             static_cast<int>(hb.mode.value),
@@ -452,12 +456,70 @@ void tryRawSubscriberScenario(Executor& executor, cetl::pmr::memory_resource& me
         const auto raw_msg = cetl::get<Receive::Success>(std::move(raw_msg_result));
 
         Heartbeat heartbeat{&memory};
-        if (!tryDeserializePayload({raw_msg.data.get(), raw_msg.size}, heartbeat))
+        if (!tryDeserializePayload({raw_msg.payload.data.get(), raw_msg.payload.size}, heartbeat))
         {
             spdlog::error("Failed to deserialize heartbeat.");
             return;
         }
         logHeartbeat(heartbeat, raw_msg.publisher_node_id, raw_msg.priority);
+    }
+}
+
+/// Demo of daemon's raw publisher - publishes `uavcan::time::Synchronization_1_0` messages (every ~1s during 30s).
+/// The first half with low priority, and the second half with high priority.
+///
+void tryPublisherScenario(Executor& executor, cetl::pmr::memory_resource& memory, const Daemon::Ptr& daemon)
+{
+    using ocvsmd::sdk::RawPublisher;
+    using SyncMessage      = uavcan::time::Synchronization_1_0;
+    using MakeRawPublisher = Daemon::MakeRawPublisher;
+
+    spdlog::info("tryRawPublisherScenario -----------------");
+
+    auto raw_pub_sender = daemon->makeRawPublisher(SyncMessage::_traits_::FixedPortId);
+    auto raw_pub_result = sync_wait<MakeRawPublisher::Result>(executor, std::move(raw_pub_sender), 2s);
+    if (const auto* const failure = cetl::get_if<MakeRawPublisher::Failure>(&raw_pub_result))
+    {
+        spdlog::error("Failed to make raw publisher (err={}).", *failure);
+        return;
+    }
+    const auto raw_publisher = cetl::get<MakeRawPublisher::Success>(std::move(raw_pub_result));
+
+    if (const auto opt_error = raw_publisher->setPriority(ocvsmd::sdk::CyphalPriority::Low))
+    {
+        spdlog::warn("Failed to set 'low' priority raw publisher (err={}).", *opt_error);
+    }
+
+    uavcan::time::Synchronization_1_0 sync_msg{&memory};
+
+    int           counter       = 0;
+    constexpr int duration_secs = 30;
+    spdlog::info("Publishing time syncs for {} secs...", duration_secs);
+    const auto until_timepoint = executor.now() + std::chrono::seconds{duration_secs};
+    while (until_timepoint > executor.now())
+    {
+        ++counter;
+        if (counter == 15)
+        {
+            if (const auto opt_error = raw_publisher->setPriority(ocvsmd::sdk::CyphalPriority::High))
+            {
+                spdlog::warn("Failed to set 'high' priority raw publisher (err={}).", *opt_error);
+            }
+        }
+
+        const auto timeout = until_timepoint - executor.now();
+
+        auto sender = raw_publisher->publish(sync_msg, 1s);
+        if (const auto error = sync_wait<OptError>(executor, std::move(sender), timeout))
+        {
+            spdlog::warn("Failed to publish raw message (err={}).", *error);
+            return;
+        }
+
+        sync_msg.previous_transmission_timestamp_microsecond =
+            std::chrono::duration_cast<std::chrono::microseconds>(executor.now().time_since_epoch()).count();
+
+        usleep(1'000'000);  // TODO: Should wait using `sync_wait` (so that the executor keep spinning).
     }
 }
 
@@ -499,6 +561,7 @@ int main(const int argc, const char** const argv)
         tryListReadWriteRegsOfNodesScenario(executor, memory, daemon);
         tryListReadWriteRegsOfSingleNodeScenario(executor, memory, daemon);
         tryRawSubscriberScenario(executor, memory, daemon);
+        tryPublisherScenario(executor, memory, daemon);
 
         if (g_running == 0)
         {

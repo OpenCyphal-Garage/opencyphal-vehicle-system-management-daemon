@@ -1,0 +1,17 @@
+@union
+
+uavcan.primitive.Empty.1.0 empty
+RawPublisherCreate.0.1 create
+RawPublisherConfig.0.1 config
+RawPublisherPublish.0.1 publish
+
+@sealed
+
+---
+
+@union
+
+uavcan.primitive.Empty.1.0 empty
+ocvsmd.common.Error.0.1 publish_error
+
+@sealed

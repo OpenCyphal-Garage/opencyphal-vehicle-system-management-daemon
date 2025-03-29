@@ -28,7 +28,8 @@ add_library(ocvsmd_sdk
         svc/file_server/list_roots_client.cpp
         svc/file_server/pop_root_client.cpp
         svc/file_server/push_root_client.cpp
-        svc/relay/create_raw_sub_client.cpp
+        svc/relay/raw_publisher_client.cpp
+        svc/relay/raw_subscriber_client.cpp
 )
 target_link_libraries(ocvsmd_sdk
         PUBLIC ${sdk_transpiled}

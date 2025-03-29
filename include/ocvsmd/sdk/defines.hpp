@@ -10,6 +10,7 @@
 #include <cetl/pf20/cetlpf.hpp>
 
 #include <cerrno>
+#include <cstddef>
 #include <cstdint>
 
 namespace ocvsmd
@@ -102,6 +103,11 @@ using CyphalNodeIds = cetl::span<CyphalNodeId>;
 ///
 using CyphalPortId = std::uint16_t;
 
+/// Defines priorities for Cyphal network messages.
+///
+/// Note, raw values are exactly the same as defined in the Cyphal specification -
+/// this is done to simplify the conversion between the SDK and the Cyphal network.
+///
 enum class CyphalPriority : std::uint8_t
 {
     Exceptional = 0,
@@ -114,6 +120,18 @@ enum class CyphalPriority : std::uint8_t
     Optional,
 
 };  // CyphalPriority
+
+/// Defines helper which owns mutable raw data buffer.
+///
+struct OwnMutablePayload
+{
+    /// Holds the size of the raw data buffer. It could be less than it was allocated.
+    std::size_t size;
+
+    /// Holds smart pointer to the raw data buffer.
+    std::unique_ptr<cetl::byte[]> data;  // NOLINT(*-avoid-c-arrays)
+
+};  // OwnMutablePayload
 
 }  // namespace sdk
 }  // namespace ocvsmd

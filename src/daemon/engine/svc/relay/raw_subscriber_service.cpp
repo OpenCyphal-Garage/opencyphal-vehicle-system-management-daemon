@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: MIT
 //
 
-#include "create_raw_sub_service.hpp"
+#include "raw_subscriber_service.hpp"
 
 #include "engine_helpers.hpp"
 #include "io/socket_buffer.hpp"
 #include "logging.hpp"
-#include "svc/relay/create_raw_sub_spec.hpp"
+#include "svc/relay/raw_subscriber_spec.hpp"
 #include "svc/svc_helpers.hpp"
 
 #include <cetl/pf17/cetlpf.hpp>
@@ -28,23 +28,23 @@ namespace relay
 namespace
 {
 
-/// Defines 'Relay: Create Raw Subscriber' service implementation.
+/// Defines 'Relay: Raw Subscriber' service implementation.
 ///
 /// It's passed (as a functor) to the IPC server router to handle incoming service requests.
 /// See `ipc::ServerRouter::registerChannel` for details, and below `operator()` for the actual implementation.
 ///
-class CreateRawSubServiceImpl final
+class RawSubscriberServiceImpl final
 {
 public:
-    using Spec    = common::svc::relay::CreateRawSubSpec;
+    using Spec    = common::svc::relay::RawSubscriberSpec;
     using Channel = common::ipc::Channel<Spec::Request, Spec::Response>;
 
-    explicit CreateRawSubServiceImpl(const ScvContext& context)
+    explicit RawSubscriberServiceImpl(const ScvContext& context)
         : context_{context}
     {
     }
 
-    /// Handles the initial `relay::CreateRawSub` service request of a new IPC channel.
+    /// Handles the initial `relay::RawSubscriber` service request of a new IPC channel.
     ///
     /// Defined as a functor operator - as it's required/expected by the IPC server router.
     ///
@@ -69,12 +69,12 @@ private:
         using Id  = std::uint64_t;
         using Ptr = std::shared_ptr<Fsm>;
 
-        Fsm(CreateRawSubServiceImpl& service, const Id id, Channel&& channel)
+        Fsm(RawSubscriberServiceImpl& service, const Id id, Channel&& channel)
             : id_{id}
             , channel_{std::move(channel)}
             , service_{service}
         {
-            logger().trace("CreateRawSubSvc::Fsm (id={}).", id_);
+            logger().trace("RawSubscriberSvc::Fsm (id={}).", id_);
 
             channel_.subscribe([this](const auto& event_var, const auto&) {
                 //
@@ -91,13 +91,20 @@ private:
 
         void start(const Spec::Request& request)
         {
-            if (makeCySubscriber(request.subject_id, request.extent_size))
+            constexpr auto CreateReq = Spec::Request::VariantType::IndexOf::create;
+
+            if (const auto* const create_req = cetl::get_if<CreateReq>(&request.union_value))
             {
-                const Spec::Response ipc_response{&memory()};
-                if (const auto opt_error = channel_.send(ipc_response))
+                if (makeCySubscriber(create_req->subject_id, create_req->extent_size))
                 {
-                    logger().warn("CreateRawSubSvc: failed to send ipc reply (err={}, fsm_id={}).", *opt_error, id_);
-                    complete(opt_error);
+                    const Spec::Response ipc_response{&memory()};
+                    if (const auto opt_error = channel_.send(ipc_response))
+                    {
+                        logger().warn("RawSubscriberSvc: failed to send ipc reply (err={}, fsm_id={}).",
+                                      *opt_error,
+                                      id_);
+                        complete(opt_error);
+                    }
                 }
             }
         }
@@ -123,21 +130,21 @@ private:
 
         void handleEvent(const Channel::Completed& completed)
         {
-            logger().debug("CreateRawSubSvc::handleEvent({}) (fsm_id={}).", completed, id_);
+            logger().debug("RawSubscriberSvc::handleEvent({}) (fsm_id={}).", completed, id_);
 
             if (!completed.keep_alive)
             {
-                logger().warn("CreateRawSubSvc: canceling processing (fsm_id={}).", id_);
+                logger().warn("RawSubscriberSvc: canceling processing (fsm_id={}).", id_);
                 complete(sdk::Error{sdk::Error::Code::Canceled});
             }
         }
 
-        bool makeCySubscriber(const sdk::CyphalPortId port_id, const std::size_t extent_bytes)
+        bool makeCySubscriber(const sdk::CyphalPortId subject_id, const std::size_t extent_bytes)
         {
             using CyMakeFailure = libcyphal::presentation::Presentation::MakeFailure;
 
             auto cy_make_result = service_.context_.presentation.makeSubscriber(  //
-                port_id,
+                subject_id,
                 extent_bytes,
                 [this](const auto& arg) {
                     //
@@ -146,8 +153,8 @@ private:
             if (const auto* const cy_failure = cetl::get_if<CyMakeFailure>(&cy_make_result))
             {
                 const auto opt_error = cyFailureToOptError(*cy_failure);
-                logger().warn("CreateRawSubSvc: failed to make subscriber (port_id={}, err={}, fsm_id={}).",
-                              port_id,
+                logger().warn("RawSubscriberSvc: failed to make subscriber (subj_id={}, err={}, fsm_id={}).",
+                              subject_id,
                               opt_error,
                               id_);
 
@@ -162,18 +169,18 @@ private:
         void handleNodeMessage(const CyScatteredBuff& raw_msg_buff, const CyMsgRxMetadata& metadata)
         {
             Spec::Response ipc_response{&memory()};
-            auto&          raw_msg = ipc_response.set_raw_message();
-            raw_msg.priority       = static_cast<std::uint8_t>(metadata.rx_meta.base.priority);
-            raw_msg.payload_size   = raw_msg_buff.size();
+            auto&          raw_sub_msg = ipc_response.set_receive();
+            raw_sub_msg.priority       = static_cast<std::uint8_t>(metadata.rx_meta.base.priority);
+            raw_sub_msg.payload_size   = raw_msg_buff.size();
             if (const auto opt_node_id = metadata.publisher_node_id)
             {
-                raw_msg.remote_node_id.push_back(*opt_node_id);
+                raw_sub_msg.remote_node_id.push_back(*opt_node_id);
             }
 
             common::io::SocketBuffer sock_buff{raw_msg_buff};
             if (const auto opt_error = channel_.send(ipc_response, sock_buff))
             {
-                logger().warn("CreateRawSubSvc: failed to send ipc response (err={}, fsm_id={}).", *opt_error, id_);
+                logger().warn("RawSubscriberSvc: failed to send ipc response (err={}, fsm_id={}).", *opt_error, id_);
             }
         }
 
@@ -183,7 +190,7 @@ private:
 
             if (const auto opt_error = channel_.complete(completion_opt_error))
             {
-                logger().warn("CreateRawSubSvc: failed to complete channel (err={}, fsm_id={}).", *opt_error, id_);
+                logger().warn("RawSubscriberSvc: failed to complete channel (err={}, fsm_id={}).", *opt_error, id_);
             }
 
             service_.releaseFsmBy(id_);
@@ -191,7 +198,7 @@ private:
 
         const Id                        id_;
         Channel                         channel_;
-        CreateRawSubServiceImpl&        service_;
+        RawSubscriberServiceImpl&       service_;
         cetl::optional<CyRawSubscriber> cy_raw_subscriber_;
 
     };  // Fsm
@@ -206,13 +213,13 @@ private:
     std::unordered_map<Fsm::Id, Fsm::Ptr> id_to_fsm_;
     common::LoggerPtr                     logger_{common::getLogger("engine")};
 
-};  // CreateRawSubServiceImpl
+};  // RawSubscriberServiceImpl
 
 }  // namespace
 
-void CreateRawSubService::registerWithContext(const ScvContext& context)
+void RawSubscriberService::registerWithContext(const ScvContext& context)
 {
-    using Impl = CreateRawSubServiceImpl;
+    using Impl = RawSubscriberServiceImpl;
 
     context.ipc_router.registerChannel<Impl::Channel>(Impl::Spec::svc_full_name(), Impl{context});
 }

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 //
 
-#include "svc/relay/create_raw_sub_service.hpp"
+#include "svc/relay/raw_subscriber_service.hpp"
 
 #include "common/io/io_gtest_helpers.hpp"
 #include "common/ipc/gateway_mock.hpp"
@@ -14,12 +14,13 @@
 #include "daemon/engine/cyphal/transport_mock.hpp"
 #include "ipc/channel.hpp"
 #include "ocvsmd/sdk/defines.hpp"
-#include "svc/relay/create_raw_sub_spec.hpp"
+#include "svc/relay/raw_subscriber_spec.hpp"
 #include "svc/svc_helpers.hpp"
 #include "tracking_memory_resource.hpp"
 #include "verify_utilz.hpp"
 #include "virtual_time_scheduler.hpp"
 
+#include <ocvsmd/common/svc/relay/RawSubscriberReceive_0_1.hpp>
 #include <uavcan/node/Version_1_0.hpp>
 
 #include <cetl/pf17/cetlpf.hpp>
@@ -59,14 +60,14 @@ using std::literals::chrono_literals::operator""ms;
 
 // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
 
-class TestCreateRawSubService : public testing::Test
+class TestRawSubscriberService : public testing::Test
 {
 protected:
-    using Spec           = svc::relay::CreateRawSubSpec;
+    using Spec           = svc::relay::RawSubscriberSpec;
     using GatewayMock    = ipc::detail::GatewayMock;
     using GatewayEvent   = ipc::detail::Gateway::Event;
     using EmptyResponse  = uavcan::primitive::Empty_1_0;
-    using RawMsgResponse = svc::relay::RawMessage_0_1;
+    using RawMsgResponse = svc::relay::RawSubscriberReceive_0_1;
 
     using CyTestMessage = uavcan::node::Version_1_0;
 
@@ -135,7 +136,7 @@ protected:
 
 // MARK: - Tests:
 
-TEST_F(TestCreateRawSubService, registerWithContext)
+TEST_F(TestRawSubscriberService, registerWithContext)
 {
     CyPresentation   cy_presentation{mr_, scheduler_, cy_transport_mock_};
     const ScvContext svc_context{mr_, scheduler_, ipc_router_mock_, cy_presentation};
@@ -143,18 +144,18 @@ TEST_F(TestCreateRawSubService, registerWithContext)
     EXPECT_THAT(ipc_router_mock_.getChannelFactory(svc_desc_), IsNull());
 
     EXPECT_CALL(ipc_router_mock_, registerChannelFactoryByName(svc_name_)).WillOnce(Return());
-    relay::CreateRawSubService::registerWithContext(svc_context);
+    relay::RawSubscriberService::registerWithContext(svc_context);
 
     EXPECT_THAT(ipc_router_mock_.getChannelFactory(svc_desc_), NotNull());
 }
 
-TEST_F(TestCreateRawSubService, request)
+TEST_F(TestRawSubscriberService, request)
 {
     CyPresentation   cy_presentation{mr_, scheduler_, cy_transport_mock_};
     const ScvContext svc_context{mr_, scheduler_, ipc_router_mock_, cy_presentation};
 
     EXPECT_CALL(ipc_router_mock_, registerChannelFactoryByName(_)).WillOnce(Return());
-    relay::CreateRawSubService::registerWithContext(svc_context);
+    relay::RawSubscriberService::registerWithContext(svc_context);
 
     auto* const ch_factory = ipc_router_mock_.getChannelFactory(svc_desc_);
     ASSERT_THAT(ch_factory, NotNull());
@@ -162,19 +163,22 @@ TEST_F(TestCreateRawSubService, request)
     StrictMock<GatewayMock> gateway_mock;
 
     Spec::Request request{&mr_};
-    request.extent_size = CyTestMessage::_traits_::ExtentBytes;
-    request.subject_id  = 123;
+    auto&         create_req = request.set_create();
+    create_req.extent_size   = CyTestMessage::_traits_::ExtentBytes;
+    create_req.subject_id    = 123;
 
     std::array<cetl::byte, 3> test_raw_bytes{b(0x11), b(0x22), b(0x33)};
+
+    const auto expected_empty = VariantWith<EmptyResponse>(_);
 
     CySessCntx cy_sess_cntx;
 
     scheduler_.scheduleAt(1s, [&](const auto&) {
         //
         // Emulate service request.
-        expectCyMsgSession(cy_sess_cntx, request.subject_id);
+        expectCyMsgSession(cy_sess_cntx, create_req.subject_id);
         EXPECT_CALL(gateway_mock, subscribe(_)).Times(1);
-        EXPECT_CALL(gateway_mock, send(_, io::PayloadVariantWith<Spec::Response>(mr_, VariantWith<EmptyResponse>(_))))
+        EXPECT_CALL(gateway_mock, send(_, io::PayloadVariantWith<Spec::Response>(mr_, expected_empty)))
             .WillOnce(Return(OptError{}));
         const auto result = tryPerformOnSerialized(request, [&](const auto payload) {
             //
@@ -245,13 +249,13 @@ namespace svc
 {
 namespace relay
 {
-static void PrintTo(const RawMessage_0_1& raw_msg, std::ostream* os)  // NOLINT
+static void PrintTo(const RawSubscriberReceive_0_1& raw_msg, std::ostream* os)  // NOLINT
 {
     const auto node_id = raw_msg.remote_node_id.empty() ? 65535 : raw_msg.remote_node_id.front();
     *os << "relay::RawMessage_0_1{priority=" << static_cast<int>(raw_msg.priority) << ", node_id=" << node_id
         << ", payload_size=" << raw_msg.payload_size << "}";
 }
-static bool operator==(const RawMessage_0_1& lhs, const RawMessage_0_1& rhs)  // NOLINT
+static bool operator==(const RawSubscriberReceive_0_1& lhs, const RawSubscriberReceive_0_1& rhs)  // NOLINT
 {
     return (lhs.priority == rhs.priority) && (lhs.remote_node_id == rhs.remote_node_id) &&
            (lhs.payload_size == rhs.payload_size);

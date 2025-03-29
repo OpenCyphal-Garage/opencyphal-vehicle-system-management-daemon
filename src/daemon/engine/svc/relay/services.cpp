@@ -5,7 +5,8 @@
 
 #include "services.hpp"
 
-#include "create_raw_sub_service.hpp"
+#include "raw_publisher_service.hpp"
+#include "raw_subscriber_service.hpp"
 #include "svc/svc_helpers.hpp"
 
 namespace ocvsmd
@@ -21,7 +22,8 @@ namespace relay
 
 void registerAllServices(const ScvContext& context)
 {
-    CreateRawSubService::registerWithContext(context);
+    RawPublisherService::registerWithContext(context);
+    RawSubscriberService::registerWithContext(context);
 }
 
 }  // namespace relay

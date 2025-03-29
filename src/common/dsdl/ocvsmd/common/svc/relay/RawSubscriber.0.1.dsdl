@@ -1,0 +1,15 @@
+@union
+
+uavcan.primitive.Empty.1.0 empty
+RawSubscriberCreate.0.1 create
+
+@sealed
+
+---
+
+@union
+
+uavcan.primitive.Empty.1.0 empty
+RawSubscriberReceive.0.1 receive
+
+@sealed

@@ -9,6 +9,7 @@ add_cyphal_library(
         NAME cli
         DSDL_FILES
         "uavcan/node/7509.Heartbeat.1.0.dsdl"
+        "uavcan/time/7168.Synchronization.1.0.dsdl"
         ALLOW_EXPERIMENTAL_LANGUAGES
         LANGUAGE cpp
         LANGUAGE_STANDARD ${CYPHAL_LANGUAGE_STANDARD}

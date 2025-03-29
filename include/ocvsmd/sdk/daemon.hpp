@@ -80,6 +80,28 @@ public:
     ///
     virtual NodeRegistryClient::Ptr getNodeRegistryClient() const = 0;
 
+    /// Defines the result type of the raw publisher creation.
+    ///
+    /// On success, the result is a smart pointer to a raw publisher with the required parameters.
+    /// On failure, the result is an SDK error.
+    ///
+    struct MakeRawPublisher final
+    {
+        using Success = RawPublisher::Ptr;
+        using Failure = Error;
+        using Result  = cetl::variant<Success, Failure>;
+    };
+    /// Makes a new raw publisher for the specified subject.
+    ///
+    /// The server-side (the daemon) of SDK will create the corresponding Cyphal network publisher,
+    /// and then publish raw messages which are passed from to the client-side of SDK.
+    /// See also `RawPublisher` docs for how to publish the outgoing messages.
+    ///
+    /// @param subject_id The subject ID to publish to.
+    /// @return An execution sender which emits the async result of the operation.
+    ///
+    virtual SenderOf<MakeRawPublisher::Result>::Ptr makeRawPublisher(const CyphalPortId subject_id) = 0;
+
     /// Defines the result type of the raw subscriber creation.
     ///
     /// On success, the result is a smart pointer to a raw subscriber with the required parameters.

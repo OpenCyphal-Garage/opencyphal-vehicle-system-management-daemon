@@ -14,7 +14,10 @@
 #include "ocvsmd/sdk/node_registry_client.hpp"
 #include "sdk_factory.hpp"
 #include "svc/as_sender.hpp"
-#include "svc/relay/create_raw_sub_client.hpp"
+#include "svc/relay/raw_publisher_client.hpp"
+#include "svc/relay/raw_publisher_spec.hpp"
+#include "svc/relay/raw_subscriber_client.hpp"
+#include "svc/relay/raw_subscriber_spec.hpp"
 
 #include <cetl/cetl.hpp>
 #include <cetl/pf17/cetlpf.hpp>
@@ -93,19 +96,41 @@ public:
         return node_registry_client_;
     }
 
-    SenderOf<MakeRawSubscriber::Result>::Ptr makeRawSubscriber(const CyphalPortId subject_id,
-                                                               const std::size_t  extent_bytes) override
+    SenderOf<MakeRawPublisher::Result>::Ptr makeRawPublisher(const CyphalPortId subject_id) override
     {
-        using CreateRawSubClient = svc::relay::CreateRawSubClient;
-        using Request            = common::svc::relay::CreateRawSubSpec::Request;
+        using RawPublisherClient = svc::relay::RawPublisherClient;
+        using Request            = common::svc::relay::RawPublisherSpec::Request;
 
-        logger_->trace("Making sender of `rawSubscriber()`.");
+        logger_->trace("Making sender of `makeRawPublisher()`.");
 
-        const Request request{extent_bytes, subject_id, &memory_};
-        auto          svc_client = CreateRawSubClient::make(memory_, ipc_router_, request);
+        Request request{&memory_};
+        auto&   create_req    = request.set_create();
+        create_req.subject_id = subject_id;
+        auto svc_client       = RawPublisherClient::make(memory_, ipc_router_, request);
+
+        return std::make_unique<svc::AsSender<MakeRawPublisher::Result, decltype(svc_client)>>(  //
+            "Daemon::makeRawPublisher",
+            std::move(svc_client),
+            logger_);
+    }
+
+    SenderOf<MakeRawSubscriber::Result>::Ptr makeRawSubscriber(  //
+        const CyphalPortId subject_id,                           // NOLINT bugprone-easily-swappable-parameters
+        const std::size_t  extent_bytes) override
+    {
+        using RawSubscriberClient = svc::relay::RawSubscriberClient;
+        using Request             = common::svc::relay::RawSubscriberSpec::Request;
+
+        logger_->trace("Making sender of `makeRawSubscriber()`.");
+
+        Request request{&memory_};
+        auto&   create_req     = request.set_create();
+        create_req.subject_id  = subject_id;
+        create_req.extent_size = extent_bytes;
+        auto svc_client        = RawSubscriberClient::make(memory_, ipc_router_, request);
 
         return std::make_unique<svc::AsSender<MakeRawSubscriber::Result, decltype(svc_client)>>(  //
-            "Daemon::rawSubscriber",
+            "Daemon::makeRawSubscriber",
             std::move(svc_client),
             logger_);
     }
